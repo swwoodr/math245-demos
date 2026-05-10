@@ -16,7 +16,7 @@
   <a class="back-link" href="/">← All Demos</a>
   <h1>Riemann Integration</h1>
   <p class="demo-eq">
-    Approximate $\displaystyle\int_a^b f(x)\,dx$ using rectangles
+    Approximate $\displaystyle\int_a^b f(x)\,dx$ with rectangles, trapezoids, or parabolas
   </p>
 
   <div class="demo-layout">
@@ -48,11 +48,14 @@
         <input type="number" id="b-in" value="3.14159" step="0.1" oninput="update()">
       </div>
 
-      <div class="ctrl-section">Rectangles</div>
+      <div class="ctrl-section">Subintervals</div>
       <div class="ctrl-row">
         <div class="ctrl-label">n <span class="ctrl-val" id="n-val">10</span></div>
         <input type="range" id="n-sl" min="1" max="150" value="10"
                oninput="document.getElementById('n-val').textContent=this.value; schedule()">
+      </div>
+      <div id="n-note" style="font-size:0.72rem;color:var(--muted);margin-top:0.2rem;display:none;">
+        Simpson's requires even n — using <strong id="n-eff-display"></strong>
       </div>
 
       <div class="ctrl-section">Method</div>
@@ -65,6 +68,12 @@
         </label>
         <label class="radio-option">
           <input type="radio" name="method" value="mid" onchange="update()"> Midpoint
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="method" value="trap" onchange="update()"> Trapezoidal rule
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="method" value="simp" onchange="update()"> Simpson's rule
         </label>
       </div>
 
@@ -79,7 +88,7 @@
 
       <div class="metrics-row cols-4">
         <div class="metric">
-          <div class="metric-label">Riemann Sum</div>
+          <div class="metric-label" id="m-rs-label">Approximation</div>
           <div class="metric-value" id="m-rs">—</div>
         </div>
         <div class="metric">
@@ -103,14 +112,16 @@
       <!-- Convergence expander -->
       <div class="expander">
         <div class="expander-head" onclick="toggleExpander(this)">
-          <span>📉 Error Convergence vs n (all three methods)</span>
+          <span>📉 Error Convergence vs n (all five methods)</span>
           <span class="expander-arrow">▼</span>
         </div>
         <div class="expander-body hidden">
-          <p>Left/Right sums converge at <strong>O(1/n)</strong>.
-             Midpoint converges at <strong>O(1/n²)</strong> — a factor of n faster,
-             visible as a steeper slope on the log-log plot.</p>
-          <div id="conv-plot" style="height:280px;"></div>
+          <p>
+            <strong>Left / Right:</strong> O(1/n) — first order.<br>
+            <strong>Midpoint &amp; Trapezoidal:</strong> O(1/n²) — second order, cancellation of leading error terms.<br>
+            <strong>Simpson's:</strong> O(1/n⁴) — fourth order, the steepest slope on the log-log plot.
+          </p>
+          <div id="conv-plot" style="height:300px;"></div>
         </div>
       </div>
 
@@ -121,42 +132,70 @@
 <script>
 // ── Function library ────────────────────────────────────────────────────────
 const FUNCS = {
-  sin:     { f: x => Math.sin(x),             label: 'sin(x)',          a: 0,            b: Math.PI        },
-  cos:     { f: x => Math.cos(x),             label: 'cos(x)',          a: 0,            b: Math.PI / 2    },
-  x2:      { f: x => x * x,                   label: 'x²',              a: 0,            b: 3              },
-  x3m2x:   { f: x => x**3 - 2*x,             label: 'x³ − 2x',        a: -1.5,         b: 2              },
-  exp:     { f: x => Math.exp(x),             label: 'eˣ',              a: 0,            b: 2              },
-  sqrt:    { f: x => Math.sqrt(Math.max(x,0)),label: '√x',              a: 0,            b: 4              },
-  xsinx:   { f: x => x * Math.sin(x),         label: 'x·sin(x)',        a: 0,            b: 2 * Math.PI    },
-  lorentz: { f: x => 1 / (1 + x * x),         label: '1/(1+x²)',        a: -3,           b: 3              },
+  sin:     { f: x => Math.sin(x),              label: 'sin(x)',    a: 0,      b: Math.PI      },
+  cos:     { f: x => Math.cos(x),              label: 'cos(x)',    a: 0,      b: Math.PI / 2  },
+  x2:      { f: x => x * x,                    label: 'x²',        a: 0,      b: 3            },
+  x3m2x:   { f: x => x**3 - 2*x,              label: 'x³ − 2x',  a: -1.5,   b: 2            },
+  exp:     { f: x => Math.exp(x),              label: 'eˣ',        a: 0,      b: 2            },
+  sqrt:    { f: x => Math.sqrt(Math.max(x,0)), label: '√x',        a: 0,      b: 4            },
+  xsinx:   { f: x => x * Math.sin(x),          label: 'x·sin(x)',  a: 0,      b: 2 * Math.PI  },
+  lorentz: { f: x => 1 / (1 + x * x),          label: '1/(1+x²)', a: -3,     b: 3            },
 };
 
-// ── Numerical integration (composite Simpson's rule, n=10000) ───────────────
+// ── High-accuracy reference value (composite Simpson, n=10000) ──────────────
 function trueIntegral(f, a, b) {
-  const N = 10000;
-  const h = (b - a) / N;
+  const N = 10000, h = (b - a) / N;
   let s = f(a) + f(b);
   for (let i = 1; i < N; i++) s += f(a + i * h) * (i % 2 === 0 ? 2 : 4);
   return s * h / 3;
+}
+
+// ── For Simpson's, n must be even ───────────────────────────────────────────
+function effN(n, method) {
+  return (method === 'simp' && n % 2 !== 0) ? n - 1 : n;
+}
+
+// ── Compute the numerical sum ───────────────────────────────────────────────
+function computeSum(f, a, b, n, method) {
+  const dx = (b - a) / n;
+  if (method === 'left') {
+    return Array.from({length: n}, (_, i) => f(a + i * dx)).reduce((s,v) => s+v, 0) * dx;
+  }
+  if (method === 'right') {
+    return Array.from({length: n}, (_, i) => f(a + (i+1) * dx)).reduce((s,v) => s+v, 0) * dx;
+  }
+  if (method === 'mid') {
+    return Array.from({length: n}, (_, i) => f(a + (i+0.5) * dx)).reduce((s,v) => s+v, 0) * dx;
+  }
+  if (method === 'trap') {
+    const fv = Array.from({length: n+1}, (_, i) => f(a + i * dx));
+    return dx / 2 * (fv[0] + 2 * fv.slice(1,-1).reduce((s,v)=>s+v,0) + fv[n]);
+  }
+  if (method === 'simp') {
+    const fv = Array.from({length: n+1}, (_, i) => f(a + i * dx));
+    let s = fv[0] + fv[n];
+    for (let i = 1; i < n; i++) s += fv[i] * (i % 2 === 0 ? 2 : 4);
+    return dx / 3 * s;
+  }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function linspace(a, b, n) {
   return Array.from({length: n}, (_, i) => a + i * (b - a) / (n - 1));
 }
-function fmt(v, dec=6) { return isFinite(v) ? v.toFixed(dec) : '—'; }
+function fmt(v, dec=6)  { return isFinite(v) ? v.toFixed(dec) : '—'; }
 function fmtE(v) {
   if (!isFinite(v)) return '—';
-  if (v < 1e-14) return '< 1e−14';
-  return v.toExponential(2).replace('e+', 'e').replace('e-0','e−').replace('e-','e−');
+  if (v < 1e-14)   return '< 1e−14';
+  return v.toExponential(2).replace('e+','e').replace('e-0','e−').replace('e-','e−');
 }
 
 // ── Plotly dark config ───────────────────────────────────────────────────────
 const PLOT_LAYOUT = {
   paper_bgcolor: 'rgba(0,0,0,0)',
   plot_bgcolor:  'rgba(16,32,56,0.6)',
-  font:          { color: '#D2E0EE', family: 'system-ui, -apple-system, sans-serif' },
-  margin:        { l: 44, r: 16, t: 20, b: 44 },
+  font:  { color: '#D2E0EE', family: 'system-ui, -apple-system, sans-serif' },
+  margin: { l: 44, r: 16, t: 20, b: 44 },
   showlegend: true,
   legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(12,26,48,0.8)',
             bordercolor: '#1A304D', borderwidth: 1, font: {size: 12} },
@@ -166,8 +205,123 @@ const PLOT_LAYOUT = {
 };
 const CFG = { displayModeBar: false, responsive: true };
 
+const METHOD_NAMES = {
+  left: 'Left sum', right: 'Right sum', mid: 'Midpoint sum',
+  trap: 'Trapezoidal', simp: "Simpson's",
+};
+
 // ── State ────────────────────────────────────────────────────────────────────
 let convPlotReady = false;
+
+// ── Build Plotly traces for each method ─────────────────────────────────────
+function buildTraces(f, fn, a, b, n, method) {
+  const dx     = (b - a) / n;
+  const xCurve = linspace(a, b, 600);
+  const yCurve = xCurve.map(f);
+  const trueArea = {
+    type: 'scatter', x: xCurve, y: yCurve, fill: 'tozeroy',
+    fillcolor: 'rgba(74,143,212,0.10)', line: {width: 0},
+    name: 'True area', hoverinfo: 'skip',
+  };
+  const curveLine = {
+    type: 'scatter', x: xCurve, y: yCurve, mode: 'lines',
+    line: {color:'#4A8FD4', width: 2.5}, name: `f(x) = ${fn.label}`,
+  };
+
+  if (method === 'left' || method === 'right' || method === 'mid') {
+    let xs;
+    if      (method === 'left')  xs = Array.from({length: n}, (_, i) => a + i * dx);
+    else if (method === 'right') xs = Array.from({length: n}, (_, i) => a + (i+1) * dx);
+    else                          xs = Array.from({length: n}, (_, i) => a + (i+0.5) * dx);
+    const heights = xs.map(f);
+    const xBars   = Array.from({length: n}, (_, i) => a + (i+0.5) * dx);
+    return [
+      trueArea,
+      { type: 'bar', x: xBars, y: heights, width: dx,
+        marker: {color:'rgba(255,155,40,0.50)', line:{color:'rgba(200,95,0,0.85)',width:1.2}},
+        name: METHOD_NAMES[method] },
+      curveLine,
+      { type: 'scatter', x: xs, y: heights, mode: 'markers',
+        marker: {color:'#E87040', size:6, symbol:'circle', line:{color:'white',width:1}},
+        name: 'Sample points' },
+    ];
+  }
+
+  if (method === 'trap') {
+    const nodes = Array.from({length: n+1}, (_, i) => a + i * dx);
+    const fv    = nodes.map(f);
+    // Interior vertical dividers (single trace with nulls)
+    const divX = [], divY = [];
+    nodes.slice(1, -1).forEach(xi => { divX.push(xi, xi, null); divY.push(0, f(xi), null); });
+    return [
+      trueArea,
+      // Filled trapezoid region — Plotly straight-lines between nodes → natural trapezoids
+      { type: 'scatter', x: nodes, y: fv, fill: 'tozeroy',
+        fillcolor: 'rgba(255,155,40,0.38)', line: {color:'rgba(220,110,0,0.85)', width:1.5},
+        name: 'Trapezoidal sum' },
+      // Dividers
+      { type: 'scatter', x: divX, y: divY, mode: 'lines',
+        line: {color:'rgba(220,110,0,0.45)', width:0.8},
+        showlegend: false, hoverinfo: 'skip' },
+      curveLine,
+      { type: 'scatter', x: nodes, y: fv, mode: 'markers',
+        marker: {color:'#E87040', size:6, symbol:'circle', line:{color:'white',width:1}},
+        name: 'Nodes' },
+    ];
+  }
+
+  if (method === 'simp') {
+    const nodes  = Array.from({length: n+1}, (_, i) => a + i * dx);
+    const fv     = nodes.map(f);
+    // Sample each parabolic arc densely for a smooth filled shape
+    const SAMP = 30;
+    const paraX = [], paraY = [];
+    for (let i = 0; i < n; i += 2) {
+      const x0=nodes[i], x1=nodes[i+1], x2=nodes[i+2];
+      const f0=fv[i],    f1=fv[i+1],    f2=fv[i+2];
+      const start = (i === 0) ? 0 : 1;   // avoid duplicate at panel joins
+      for (let j = start; j <= SAMP; j++) {
+        const t = j / SAMP;
+        const x = x0 + t * (x2 - x0);
+        // Lagrange quadratic through (x0,f0),(x1,f1),(x2,f2)
+        const p = f0*(x-x1)*(x-x2)/((x0-x1)*(x0-x2))
+                + f1*(x-x0)*(x-x2)/((x1-x0)*(x1-x2))
+                + f2*(x-x0)*(x-x1)/((x2-x0)*(x2-x1));
+        paraX.push(x);
+        paraY.push(p);
+      }
+    }
+    // Panel dividers at every other node (at x_{2i})
+    const divX = [], divY = [];
+    for (let i = 2; i < n; i += 2) {
+      divX.push(nodes[i], nodes[i], null);
+      divY.push(0, fv[i], null);
+    }
+    return [
+      trueArea,
+      { type: 'scatter', x: paraX, y: paraY, fill: 'tozeroy',
+        fillcolor: 'rgba(147,80,220,0.32)', line: {color:'rgba(160,90,230,0.85)', width:1.5},
+        name: "Simpson's sum" },
+      { type: 'scatter', x: divX, y: divY, mode: 'lines',
+        line: {color:'rgba(147,80,220,0.45)', width:0.8},
+        showlegend: false, hoverinfo: 'skip' },
+      curveLine,
+      // Mark odd-index nodes (midpoints of each pair) differently
+      { type: 'scatter',
+        x: nodes.filter((_,i)=>i%2===0), y: fv.filter((_,i)=>i%2===0),
+        mode: 'markers',
+        marker: {color:'#A056E0', size:7, symbol:'circle', line:{color:'white',width:1}},
+        name: 'Endpoint nodes' },
+      { type: 'scatter',
+        x: nodes.filter((_,i)=>i%2===1), y: fv.filter((_,i)=>i%2===1),
+        mode: 'markers',
+        marker: {color:'#E87040', size:6, symbol:'diamond', line:{color:'white',width:1}},
+        name: 'Midpoint nodes' },
+    ];
+  }
+
+  return [];
+}
 
 // ── Main update ──────────────────────────────────────────────────────────────
 function update() {
@@ -176,109 +330,95 @@ function update() {
   const f      = fn.f;
   const a      = parseFloat(document.getElementById('a-in').value);
   const b      = parseFloat(document.getElementById('b-in').value);
-  const n      = parseInt(document.getElementById('n-sl').value);
+  const nRaw   = parseInt(document.getElementById('n-sl').value);
   const method = document.querySelector('input[name="method"]:checked').value;
 
   if (!isFinite(a) || !isFinite(b) || a >= b) return;
 
-  const dx = (b - a) / n;
+  const n = effN(nRaw, method);
 
-  // Sample points
-  let xs;
-  if      (method === 'left')  xs = Array.from({length: n}, (_, i) => a + i * dx);
-  else if (method === 'right') xs = Array.from({length: n}, (_, i) => a + (i+1) * dx);
-  else                          xs = Array.from({length: n}, (_, i) => a + (i+0.5) * dx);
+  // Show/hide the even-n note for Simpson's
+  const note = document.getElementById('n-note');
+  if (method === 'simp' && n !== nRaw) {
+    note.style.display = '';
+    document.getElementById('n-eff-display').textContent = n;
+  } else {
+    note.style.display = 'none';
+  }
 
-  const heights  = xs.map(x => f(x));
-  const rs       = heights.reduce((s, h) => s + h, 0) * dx;
-  const trueVal  = trueIntegral(f, a, b);
-  const absErr   = Math.abs(rs - trueVal);
-  const relErr   = trueVal !== 0 ? 100 * absErr / Math.abs(trueVal) : NaN;
+  const rs      = computeSum(f, a, b, n, method);
+  const trueVal = trueIntegral(f, a, b);
+  const absErr  = Math.abs(rs - trueVal);
+  const relErr  = trueVal !== 0 ? 100 * absErr / Math.abs(trueVal) : NaN;
 
-  // Smooth curve
-  const xCurve = linspace(a, b, 600);
-  const yCurve = xCurve.map(f);
+  // Update metric label
+  document.getElementById('m-rs-label').textContent = METHOD_NAMES[method];
 
-  // Bar x-centers (always at midpoint of each rectangle)
-  const xBars = Array.from({length: n}, (_, i) => a + (i+0.5) * dx);
-
-  const traces = [
-    // True area shading
-    { type: 'scatter', x: xCurve, y: yCurve, fill: 'tozeroy',
-      fillcolor: 'rgba(74,143,212,0.12)', line: {width: 0},
-      name: 'True area', hoverinfo: 'skip' },
-    // Riemann rectangles
-    { type: 'bar', x: xBars, y: heights, width: dx,
-      marker: { color: 'rgba(255,155,40,0.50)', line: {color:'rgba(200,95,0,0.85)',width:1.2} },
-      name: `${method==='left'?'Left':method==='right'?'Right':'Midpoint'} sum` },
-    // Curve
-    { type: 'scatter', x: xCurve, y: yCurve, mode: 'lines',
-      line: {color:'#4A8FD4', width: 2.5}, name: `f(x) = ${fn.label}` },
-    // Sample points
-    { type: 'scatter', x: xs, y: heights, mode: 'markers',
-      marker: {color:'#E87040', size:6, symbol:'circle', line:{color:'white',width:1}},
-      name: 'Sample points' },
-  ];
-
+  // Plot
+  const traces = buildTraces(f, fn, a, b, n, method);
   Plotly.react('main-plot', traces, {
     ...PLOT_LAYOUT,
-    xaxis: { ...PLOT_LAYOUT.xaxis, title: 'x' },
-    yaxis: { ...PLOT_LAYOUT.yaxis, title: 'y' },
+    xaxis: {...PLOT_LAYOUT.xaxis, title: 'x'},
+    yaxis: {...PLOT_LAYOUT.yaxis, title: 'y'},
   }, CFG);
 
   // Metrics
   document.getElementById('m-rs').textContent   = fmt(rs);
-  document.getElementById('m-true').textContent  = fmt(trueVal);
-  document.getElementById('m-abs').textContent   = fmtE(absErr);
-  document.getElementById('m-rel').textContent   = isFinite(relErr) ? relErr.toFixed(3)+'%' : '—';
+  document.getElementById('m-true').textContent = fmt(trueVal);
+  document.getElementById('m-abs').textContent  = fmtE(absErr);
+  document.getElementById('m-rel').textContent  = isFinite(relErr) ? relErr.toFixed(3)+'%' : '—';
 
-  // LaTeX line
+  // LaTeX summary line
   document.getElementById('latex-line').innerHTML =
     katex.renderToString(
-      `\\int_{${a.toPrecision(4)}}^{${b.toPrecision(4)}} f(x)\\,dx \\approx ${rs.toFixed(5)} \\quad (\\text{true: }${trueVal.toFixed(5)})`,
+      `\\int_{${a.toPrecision(4)}}^{${b.toPrecision(4)}} f(x)\\,dx \\approx ${rs.toFixed(5)}` +
+      `\\quad (\\text{true: }${trueVal.toFixed(5)})`,
       {throwOnError: false, displayMode: true}
     );
 
-  // Update convergence plot if open
   if (convPlotReady) drawConvergence(f, a, b);
 }
 
 // ── Convergence plot ─────────────────────────────────────────────────────────
 function drawConvergence(f, a, b) {
-  const nVals = Array.from({length: 200}, (_, i) => i + 1);
-  const errs  = {left:[], right:[], mid:[]};
-
+  const nVals   = Array.from({length: 200}, (_, i) => i + 2);  // start at 2 for Simpson's
   const trueVal = trueIntegral(f, a, b);
+  const errs    = {left:[], right:[], mid:[], trap:[], simp:[]};
 
   for (const ni of nVals) {
-    const dxi  = (b - a) / ni;
-    const xl   = Array.from({length: ni}, (_, i) => a + i * dxi);
-    const xr   = xl.map(x => x + dxi);
-    const xm   = xl.map(x => x + dxi/2);
-    const sum  = (xs) => xs.reduce((s, x) => s + f(x), 0) * dxi;
-    errs.left.push(Math.abs(sum(xl) - trueVal));
-    errs.right.push(Math.abs(sum(xr) - trueVal));
-    errs.mid.push(Math.abs(sum(xm) - trueVal));
+    const dxi = (b - a) / ni;
+    // Left
+    errs.left.push(Math.abs(computeSum(f,a,b,ni,'left')  - trueVal));
+    errs.right.push(Math.abs(computeSum(f,a,b,ni,'right') - trueVal));
+    errs.mid.push(Math.abs(computeSum(f,a,b,ni,'mid')   - trueVal));
+    errs.trap.push(Math.abs(computeSum(f,a,b,ni,'trap')  - trueVal));
+    // Simpson's needs even n
+    const ni2 = ni % 2 === 0 ? ni : ni - 1;
+    errs.simp.push(Math.abs(computeSum(f,a,b,ni2,'simp') - trueVal));
   }
 
-  // Reference lines anchored at n=1 left-error
-  const scale = errs.left[0] || 1;
-  const ref1n  = nVals.map(n => scale / n);
-  const ref1n2 = nVals.map(n => scale / (n * n));
+  // Reference lines anchored at n=2 error of left method
+  const anchor = errs.left[0] || 1;
+  const ref1n  = nVals.map(n => anchor / n);
+  const ref1n2 = nVals.map(n => anchor / (n * n));
+  const ref1n4 = nVals.map(n => anchor / (n * n * n * n));
 
   const traces = [
-    {x: nVals, y: errs.left,  mode:'lines', name:'Left',     line:{color:'#4A8FD4',width:2}},
-    {x: nVals, y: errs.right, mode:'lines', name:'Right',    line:{color:'#D44848',width:2,dash:'dot'}},
-    {x: nVals, y: errs.mid,   mode:'lines', name:'Midpoint', line:{color:'#27A96C',width:2}},
-    {x: nVals, y: ref1n,      mode:'lines', name:'O(1/n)',   line:{color:'#89A4BC',width:1.2,dash:'dash'}},
-    {x: nVals, y: ref1n2,     mode:'lines', name:'O(1/n²)', line:{color:'#E8C040',width:1.2,dash:'dash'}},
+    {x:nVals, y:errs.left,  mode:'lines', name:'Left',         line:{color:'#4A8FD4',width:2}},
+    {x:nVals, y:errs.right, mode:'lines', name:'Right',        line:{color:'#D44848',width:2,dash:'dot'}},
+    {x:nVals, y:errs.mid,   mode:'lines', name:'Midpoint',     line:{color:'#27A96C',width:2}},
+    {x:nVals, y:errs.trap,  mode:'lines', name:'Trapezoidal',  line:{color:'#E87040',width:2,dash:'dash'}},
+    {x:nVals, y:errs.simp,  mode:'lines', name:"Simpson's",    line:{color:'#A056E0',width:2.5}},
+    {x:nVals, y:ref1n,      mode:'lines', name:'O(1/n)',        line:{color:'#89A4BC',width:1.2,dash:'dash'}},
+    {x:nVals, y:ref1n2,     mode:'lines', name:'O(1/n²)',      line:{color:'#E8C040',width:1.2,dash:'dash'}},
+    {x:nVals, y:ref1n4,     mode:'lines', name:'O(1/n⁴)',      line:{color:'#D2E0EE',width:1.2,dash:'longdash'}},
   ];
 
   Plotly.react('conv-plot', traces, {
     ...PLOT_LAYOUT,
     margin: {l:50, r:16, t:10, b:44},
-    xaxis: {...PLOT_LAYOUT.xaxis, title:'n (rectangles)', type:'log'},
-    yaxis: {...PLOT_LAYOUT.yaxis, title:'|Error|',         type:'log'},
+    xaxis: {...PLOT_LAYOUT.xaxis, title:'n (subintervals)', type:'log'},
+    yaxis: {...PLOT_LAYOUT.yaxis, title:'|Error|',          type:'log'},
     legend: {...PLOT_LAYOUT.legend, x:0.99, xanchor:'right'},
   }, CFG);
 }
@@ -296,9 +436,9 @@ function onFuncChange() {
 function toggleExpander(head) {
   const body  = head.nextElementSibling;
   const arrow = head.querySelector('.expander-arrow');
-  const open  = body.classList.toggle('hidden');  // toggle returns new state
+  const open  = body.classList.toggle('hidden');
   arrow.style.transform = open ? '' : 'rotate(180deg)';
-  if (!open && !convPlotReady) {  // first open
+  if (!open && !convPlotReady) {
     const key = document.getElementById('func-sel').value;
     const fn  = FUNCS[key];
     const a   = parseFloat(document.getElementById('a-in').value);
