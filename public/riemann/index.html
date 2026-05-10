@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Riemann Integration</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Riemann Integration</h1>
+  <p class="demo-eq">
+    Approximate $\displaystyle\int_a^b f(x)\,dx$ using rectangles
+  </p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Function</div>
+      <div class="ctrl-row">
+        <select id="func-sel" onchange="onFuncChange()">
+          <option value="sin">sin(x)</option>
+          <option value="cos">cos(x)</option>
+          <option value="x2">x²</option>
+          <option value="x3m2x">x³ − 2x</option>
+          <option value="exp">eˣ</option>
+          <option value="sqrt">√x</option>
+          <option value="xsinx">x · sin(x)</option>
+          <option value="lorentz">1 / (1 + x²)</option>
+        </select>
+      </div>
+
+      <div class="ctrl-section">Interval</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">a (left)</div>
+        <input type="number" id="a-in" value="0" step="0.1" oninput="update()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">b (right)</div>
+        <input type="number" id="b-in" value="3.14159" step="0.1" oninput="update()">
+      </div>
+
+      <div class="ctrl-section">Rectangles</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">n <span class="ctrl-val" id="n-val">10</span></div>
+        <input type="range" id="n-sl" min="1" max="150" value="10"
+               oninput="document.getElementById('n-val').textContent=this.value; schedule()">
+      </div>
+
+      <div class="ctrl-section">Method</div>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="method" value="left" checked onchange="update()"> Left endpoint
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="method" value="right" onchange="update()"> Right endpoint
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="method" value="mid" onchange="update()"> Midpoint
+        </label>
+      </div>
+
+    </div><!-- /controls -->
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box">
+        <div id="main-plot" style="height:420px;"></div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric">
+          <div class="metric-label">Riemann Sum</div>
+          <div class="metric-value" id="m-rs">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">True Integral</div>
+          <div class="metric-value plain" id="m-true">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Absolute Error</div>
+          <div class="metric-value" id="m-abs">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Relative Error</div>
+          <div class="metric-value" id="m-rel">—</div>
+        </div>
+      </div>
+
+      <div id="latex-line" style="text-align:center; padding:0.25rem 0; font-size:0.9rem; color:var(--muted);">
+        &nbsp;
+      </div>
+
+      <!-- Convergence expander -->
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExpander(this)">
+          <span>📉 Error Convergence vs n (all three methods)</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>Left/Right sums converge at <strong>O(1/n)</strong>.
+             Midpoint converges at <strong>O(1/n²)</strong> — a factor of n faster,
+             visible as a steeper slope on the log-log plot.</p>
+          <div id="conv-plot" style="height:280px;"></div>
+        </div>
+      </div>
+
+    </div><!-- /plot-panel -->
+  </div><!-- /demo-layout -->
+</div><!-- /demo-wrap -->
+
+<script>
+// ── Function library ────────────────────────────────────────────────────────
+const FUNCS = {
+  sin:     { f: x => Math.sin(x),             label: 'sin(x)',          a: 0,            b: Math.PI        },
+  cos:     { f: x => Math.cos(x),             label: 'cos(x)',          a: 0,            b: Math.PI / 2    },
+  x2:      { f: x => x * x,                   label: 'x²',              a: 0,            b: 3              },
+  x3m2x:   { f: x => x**3 - 2*x,             label: 'x³ − 2x',        a: -1.5,         b: 2              },
+  exp:     { f: x => Math.exp(x),             label: 'eˣ',              a: 0,            b: 2              },
+  sqrt:    { f: x => Math.sqrt(Math.max(x,0)),label: '√x',              a: 0,            b: 4              },
+  xsinx:   { f: x => x * Math.sin(x),         label: 'x·sin(x)',        a: 0,            b: 2 * Math.PI    },
+  lorentz: { f: x => 1 / (1 + x * x),         label: '1/(1+x²)',        a: -3,           b: 3              },
+};
+
+// ── Numerical integration (composite Simpson's rule, n=10000) ───────────────
+function trueIntegral(f, a, b) {
+  const N = 10000;
+  const h = (b - a) / N;
+  let s = f(a) + f(b);
+  for (let i = 1; i < N; i++) s += f(a + i * h) * (i % 2 === 0 ? 2 : 4);
+  return s * h / 3;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function linspace(a, b, n) {
+  return Array.from({length: n}, (_, i) => a + i * (b - a) / (n - 1));
+}
+function fmt(v, dec=6) { return isFinite(v) ? v.toFixed(dec) : '—'; }
+function fmtE(v) {
+  if (!isFinite(v)) return '—';
+  if (v < 1e-14) return '< 1e−14';
+  return v.toExponential(2).replace('e+', 'e').replace('e-0','e−').replace('e-','e−');
+}
+
+// ── Plotly dark config ───────────────────────────────────────────────────────
+const PLOT_LAYOUT = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor:  'rgba(16,32,56,0.6)',
+  font:          { color: '#D2E0EE', family: 'system-ui, -apple-system, sans-serif' },
+  margin:        { l: 44, r: 16, t: 20, b: 44 },
+  showlegend: true,
+  legend: { x: 0.01, y: 0.99, bgcolor: 'rgba(12,26,48,0.8)',
+            bordercolor: '#1A304D', borderwidth: 1, font: {size: 12} },
+  xaxis: { title: 'x', gridcolor: '#1A304D', zerolinecolor: '#2A4060', zerolinewidth: 1.5 },
+  yaxis: { gridcolor: '#1A304D', zerolinecolor: '#2A4060', zerolinewidth: 1.5 },
+  bargap: 0, bargroupgap: 0,
+};
+const CFG = { displayModeBar: false, responsive: true };
+
+// ── State ────────────────────────────────────────────────────────────────────
+let convPlotReady = false;
+
+// ── Main update ──────────────────────────────────────────────────────────────
+function update() {
+  const key    = document.getElementById('func-sel').value;
+  const fn     = FUNCS[key];
+  const f      = fn.f;
+  const a      = parseFloat(document.getElementById('a-in').value);
+  const b      = parseFloat(document.getElementById('b-in').value);
+  const n      = parseInt(document.getElementById('n-sl').value);
+  const method = document.querySelector('input[name="method"]:checked').value;
+
+  if (!isFinite(a) || !isFinite(b) || a >= b) return;
+
+  const dx = (b - a) / n;
+
+  // Sample points
+  let xs;
+  if      (method === 'left')  xs = Array.from({length: n}, (_, i) => a + i * dx);
+  else if (method === 'right') xs = Array.from({length: n}, (_, i) => a + (i+1) * dx);
+  else                          xs = Array.from({length: n}, (_, i) => a + (i+0.5) * dx);
+
+  const heights  = xs.map(x => f(x));
+  const rs       = heights.reduce((s, h) => s + h, 0) * dx;
+  const trueVal  = trueIntegral(f, a, b);
+  const absErr   = Math.abs(rs - trueVal);
+  const relErr   = trueVal !== 0 ? 100 * absErr / Math.abs(trueVal) : NaN;
+
+  // Smooth curve
+  const xCurve = linspace(a, b, 600);
+  const yCurve = xCurve.map(f);
+
+  // Bar x-centers (always at midpoint of each rectangle)
+  const xBars = Array.from({length: n}, (_, i) => a + (i+0.5) * dx);
+
+  const traces = [
+    // True area shading
+    { type: 'scatter', x: xCurve, y: yCurve, fill: 'tozeroy',
+      fillcolor: 'rgba(74,143,212,0.12)', line: {width: 0},
+      name: 'True area', hoverinfo: 'skip' },
+    // Riemann rectangles
+    { type: 'bar', x: xBars, y: heights, width: dx,
+      marker: { color: 'rgba(255,155,40,0.50)', line: {color:'rgba(200,95,0,0.85)',width:1.2} },
+      name: `${method==='left'?'Left':method==='right'?'Right':'Midpoint'} sum` },
+    // Curve
+    { type: 'scatter', x: xCurve, y: yCurve, mode: 'lines',
+      line: {color:'#4A8FD4', width: 2.5}, name: `f(x) = ${fn.label}` },
+    // Sample points
+    { type: 'scatter', x: xs, y: heights, mode: 'markers',
+      marker: {color:'#E87040', size:6, symbol:'circle', line:{color:'white',width:1}},
+      name: 'Sample points' },
+  ];
+
+  Plotly.react('main-plot', traces, {
+    ...PLOT_LAYOUT,
+    xaxis: { ...PLOT_LAYOUT.xaxis, title: 'x' },
+    yaxis: { ...PLOT_LAYOUT.yaxis, title: 'y' },
+  }, CFG);
+
+  // Metrics
+  document.getElementById('m-rs').textContent   = fmt(rs);
+  document.getElementById('m-true').textContent  = fmt(trueVal);
+  document.getElementById('m-abs').textContent   = fmtE(absErr);
+  document.getElementById('m-rel').textContent   = isFinite(relErr) ? relErr.toFixed(3)+'%' : '—';
+
+  // LaTeX line
+  document.getElementById('latex-line').innerHTML =
+    katex.renderToString(
+      `\\int_{${a.toPrecision(4)}}^{${b.toPrecision(4)}} f(x)\\,dx \\approx ${rs.toFixed(5)} \\quad (\\text{true: }${trueVal.toFixed(5)})`,
+      {throwOnError: false, displayMode: true}
+    );
+
+  // Update convergence plot if open
+  if (convPlotReady) drawConvergence(f, a, b);
+}
+
+// ── Convergence plot ─────────────────────────────────────────────────────────
+function drawConvergence(f, a, b) {
+  const nVals = Array.from({length: 200}, (_, i) => i + 1);
+  const errs  = {left:[], right:[], mid:[]};
+
+  const trueVal = trueIntegral(f, a, b);
+
+  for (const ni of nVals) {
+    const dxi  = (b - a) / ni;
+    const xl   = Array.from({length: ni}, (_, i) => a + i * dxi);
+    const xr   = xl.map(x => x + dxi);
+    const xm   = xl.map(x => x + dxi/2);
+    const sum  = (xs) => xs.reduce((s, x) => s + f(x), 0) * dxi;
+    errs.left.push(Math.abs(sum(xl) - trueVal));
+    errs.right.push(Math.abs(sum(xr) - trueVal));
+    errs.mid.push(Math.abs(sum(xm) - trueVal));
+  }
+
+  // Reference lines anchored at n=1 left-error
+  const scale = errs.left[0] || 1;
+  const ref1n  = nVals.map(n => scale / n);
+  const ref1n2 = nVals.map(n => scale / (n * n));
+
+  const traces = [
+    {x: nVals, y: errs.left,  mode:'lines', name:'Left',     line:{color:'#4A8FD4',width:2}},
+    {x: nVals, y: errs.right, mode:'lines', name:'Right',    line:{color:'#D44848',width:2,dash:'dot'}},
+    {x: nVals, y: errs.mid,   mode:'lines', name:'Midpoint', line:{color:'#27A96C',width:2}},
+    {x: nVals, y: ref1n,      mode:'lines', name:'O(1/n)',   line:{color:'#89A4BC',width:1.2,dash:'dash'}},
+    {x: nVals, y: ref1n2,     mode:'lines', name:'O(1/n²)', line:{color:'#E8C040',width:1.2,dash:'dash'}},
+  ];
+
+  Plotly.react('conv-plot', traces, {
+    ...PLOT_LAYOUT,
+    margin: {l:50, r:16, t:10, b:44},
+    xaxis: {...PLOT_LAYOUT.xaxis, title:'n (rectangles)', type:'log'},
+    yaxis: {...PLOT_LAYOUT.yaxis, title:'|Error|',         type:'log'},
+    legend: {...PLOT_LAYOUT.legend, x:0.99, xanchor:'right'},
+  }, CFG);
+}
+
+// ── Function change: reset a/b defaults ──────────────────────────────────────
+function onFuncChange() {
+  const key = document.getElementById('func-sel').value;
+  const fn  = FUNCS[key];
+  document.getElementById('a-in').value = fn.a.toPrecision(5);
+  document.getElementById('b-in').value = fn.b.toPrecision(5);
+  update();
+}
+
+// ── Expander toggle ──────────────────────────────────────────────────────────
+function toggleExpander(head) {
+  const body  = head.nextElementSibling;
+  const arrow = head.querySelector('.expander-arrow');
+  const open  = body.classList.toggle('hidden');  // toggle returns new state
+  arrow.style.transform = open ? '' : 'rotate(180deg)';
+  if (!open && !convPlotReady) {  // first open
+    const key = document.getElementById('func-sel').value;
+    const fn  = FUNCS[key];
+    const a   = parseFloat(document.getElementById('a-in').value);
+    const b   = parseFloat(document.getElementById('b-in').value);
+    if (isFinite(a) && isFinite(b) && a < b) {
+      drawConvergence(fn.f, a, b);
+      convPlotReady = true;
+    }
+  }
+}
+
+// ── Debounce for slider ──────────────────────────────────────────────────────
+let _timer;
+function schedule() { clearTimeout(_timer); _timer = setTimeout(update, 80); }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+onFuncChange();
+</script>
+</body>
+</html>

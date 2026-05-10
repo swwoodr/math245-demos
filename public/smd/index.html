@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spring-Mass-Damper</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Spring-Mass-Damper</h1>
+  <p class="demo-eq">$m\,y'' + c\,y' + k\,y = 0$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Parameters</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Mass m (kg) <span class="ctrl-val" id="m-val">1.0</span></div>
+        <input type="range" id="m-sl" min="0.5" max="5" step="0.1" value="1.0"
+               oninput="sv('m-val',this.value,'');schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Damping c <span class="ctrl-val" id="c-val">0.4</span></div>
+        <input type="range" id="c-sl" min="0" max="5" step="0.1" value="0.4"
+               oninput="sv('c-val',this.value,'');schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Spring k (N/m) <span class="ctrl-val" id="k-val">12.0</span></div>
+        <input type="range" id="k-sl" min="1" max="30" step="0.5" value="12.0"
+               oninput="sv('k-val',this.value,'');schedule()">
+      </div>
+
+      <div class="ctrl-section">Initial Conditions</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">y₀ (m) <span class="ctrl-val" id="y0-val">1.0</span></div>
+        <input type="range" id="y0-sl" min="-2" max="2" step="0.1" value="1.0"
+               oninput="sv('y0-val',this.value,'');schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">v₀ (m/s) <span class="ctrl-val" id="v0-val">0.0</span></div>
+        <input type="range" id="v0-sl" min="-5" max="5" step="0.5" value="0.0"
+               oninput="sv('v0-val',this.value,'');schedule()">
+      </div>
+
+      <div class="ctrl-section">Time</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Span T (s) <span class="ctrl-val" id="T-val">20</span></div>
+        <input type="range" id="T-sl" min="5" max="30" step="1" value="20"
+               oninput="sv('T-val',this.value,'');schedule()">
+      </div>
+
+    </div><!-- /controls -->
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box">
+        <div id="anim-plot" style="height:450px;"></div>
+      </div>
+
+      <div class="metrics-row cols-3">
+        <div class="metric">
+          <div class="metric-label">Natural Freq ωₙ</div>
+          <div class="metric-value" id="met-wn">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Damping Ratio ζ</div>
+          <div class="metric-value" id="met-zeta">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Behavior</div>
+          <div class="metric-value plain" id="met-type">—</div>
+        </div>
+      </div>
+
+      <div id="roots-line" style="text-align:center; padding:0.25rem 0; min-height:2.5rem;"></div>
+
+    </div><!-- /plot-panel -->
+  </div><!-- /demo-layout -->
+</div><!-- /demo-wrap -->
+
+<script>
+// ── RK4 solver ───────────────────────────────────────────────────────────────
+function rk4(ode, y0, T, nSteps) {
+  const dt = T / nSteps;
+  const t = [0];
+  const Y = [y0.slice()];
+  for (let i = 0; i < nSteps; i++) {
+    const ti = t[i], yi = Y[i];
+    const k1 = ode(ti, yi);
+    const k2 = ode(ti+dt/2, yi.map((v,j)=>v+dt/2*k1[j]));
+    const k3 = ode(ti+dt/2, yi.map((v,j)=>v+dt/2*k2[j]));
+    const k4 = ode(ti+dt,   yi.map((v,j)=>v+dt*k3[j]));
+    Y.push(yi.map((v,j)=>v+dt/6*(k1[j]+2*k2[j]+2*k3[j]+k4[j])));
+    t.push(ti+dt);
+  }
+  return { t, Y };
+}
+
+// ── Spring geometry ───────────────────────────────────────────────────────────
+function makeSpring(yTop, yBot, xc=0, amp=0.15, nCoils=8) {
+  if (yBot < yTop + 0.05) yBot = yTop + 0.05;
+  const pad = 0.08*(yBot-yTop);
+  const y2 = yTop+pad, y3 = yBot-pad;
+  const nZ = 2*nCoils+1;
+  const yc = [], xa = [];
+  for (let i=0; i<=nZ; i++) {
+    yc.push(y2 + i*(y3-y2)/nZ);
+    xa.push(i===0||i===nZ ? xc : i%2===1 ? xc+amp : xc-amp);
+  }
+  return { xs:[xc,xc,...xa,xc,xc], ys:[yTop,y2,...yc,y3,yBot] };
+}
+
+function makeMass(top, w=0.8, h=0.45) {
+  const l=-w/2, r=w/2, b=top+h;
+  return { xs:[l,r,r,l,l], ys:[top,top,b,b,top] };
+}
+
+// ── Display constants ─────────────────────────────────────────────────────────
+const EQ_TOP=2.0, SCALE=0.5, G_X0=2.0;
+
+function dispY(yp) { return EQ_TOP + SCALE*yp; }
+
+// ── Plotly config ─────────────────────────────────────────────────────────────
+const CFG = {displayModeBar:false, responsive:true};
+const BASE_LAYOUT = {
+  paper_bgcolor:'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(16,32,56,0.6)',
+  font: {color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+  margin: {l:10, r:10, t:50, b:80},
+  showlegend: false,
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function sv(id, val, unit) {
+  document.getElementById(id).textContent = parseFloat(val).toFixed(1) + unit;
+}
+function g(id) { return parseFloat(document.getElementById(id).value); }
+
+// ── Main build ────────────────────────────────────────────────────────────────
+function build() {
+  const m=g('m-sl'), c=g('c-sl'), k=g('k-sl');
+  const y0=g('y0-sl'), v0=g('v0-sl'), T=g('T-sl');
+  const G_SCALE = 3.8 / T;
+
+  // Solve
+  const { t, Y } = rk4(
+    (ti, yi) => [yi[1], -(c/m)*yi[1]-(k/m)*yi[0]],
+    [y0, v0], T, 600
+  );
+  const yPhys = Y.map(yi=>yi[0]);
+
+  // Metrics
+  const wn   = Math.sqrt(k/m);
+  const zeta = c / (2*Math.sqrt(m*k));
+  document.getElementById('met-wn').textContent   = wn.toFixed(3)+' rad/s';
+  document.getElementById('met-zeta').textContent = zeta.toFixed(3);
+  const stype = zeta<1-1e-9 ? 'Underdamped' : zeta>1+1e-9 ? 'Overdamped' : 'Critically Damped';
+  document.getElementById('met-type').textContent = stype;
+
+  // Characteristic roots (LaTeX)
+  let rootLatex = '';
+  if (zeta < 1-1e-9) {
+    const wd = wn*Math.sqrt(1-zeta*zeta);
+    rootLatex = `r = ${(-zeta*wn).toFixed(3)} \\pm ${wd.toFixed(3)}\\,i`;
+  } else if (zeta > 1+1e-9) {
+    const r1 = -zeta*wn+wn*Math.sqrt(zeta*zeta-1);
+    const r2 = -zeta*wn-wn*Math.sqrt(zeta*zeta-1);
+    rootLatex = `r_1=${r1.toFixed(3)},\\quad r_2=${r2.toFixed(3)}`;
+  } else {
+    rootLatex = `r = ${(-zeta*wn).toFixed(3)}\\text{ (repeated)}`;
+  }
+  document.getElementById('roots-line').innerHTML =
+    katex.renderToString(rootLatex, {throwOnError:false, displayMode:true});
+
+  // Axis limits
+  const ampD = Math.max(...yPhys.map(Math.abs)) * SCALE;
+  const yHi  = Math.max(EQ_TOP + ampD + 0.7, 3.5);
+  const yLo  = -0.55;
+  const xEnd = G_X0 + G_SCALE * T;
+
+  // Build Plotly frames
+  const N_FRAMES = 150;
+  const step = Math.max(1, Math.floor(t.length/N_FRAMES));
+  const frames = [];
+
+  for (let fi=0; fi<t.length; fi+=step) {
+    const mt = dispY(yPhys[fi]);
+    const sp = makeSpring(0, mt);
+    const ms = makeMass(mt);
+    const gx = t.slice(0,fi+1).map(ti=>G_X0+G_SCALE*ti);
+    const gy = yPhys.slice(0,fi+1).map(dispY);
+    frames.push({
+      name: t[fi].toFixed(1),
+      data: [
+        {x:sp.xs, y:sp.ys},
+        {x:ms.xs, y:ms.ys},
+        {x:gx,    y:gy},
+        {x:[gx[gx.length-1]], y:[gy[gy.length-1]]},
+      ]
+    });
+  }
+
+  // Initial state (first frame)
+  const mt0=dispY(yPhys[0]), sp0=makeSpring(0,mt0), ms0=makeMass(mt0);
+  const initialData = [
+    {type:'scatter',x:sp0.xs,y:sp0.ys,mode:'lines',
+     line:{color:'#4A8FD4',width:2.5}},
+    {type:'scatter',x:ms0.xs,y:ms0.ys,mode:'lines',
+     fill:'toself',fillcolor:'#C03030',line:{color:'#800000',width:2}},
+    {type:'scatter',x:[G_X0],y:[dispY(yPhys[0])],mode:'lines',
+     line:{color:'#4A8FD4',width:2}},
+    {type:'scatter',x:[G_X0],y:[dispY(yPhys[0])],mode:'markers',
+     marker:{color:'#E04040',size:9}},
+  ];
+
+  // t-axis tick annotations on graph panel
+  const annotations = [];
+  const tTicks = 6;
+  for (let i=0; i<=tTicks; i++) {
+    const tv = T*i/tTicks;
+    const xv = G_X0 + G_SCALE*tv;
+    annotations.push({
+      x:xv, y:EQ_TOP+0.22, text:`${tv.toFixed(0)}`,
+      showarrow:false, font:{size:10,color:'#5E7A96'}, xanchor:'center'
+    });
+  }
+  annotations.push({
+    x:G_X0+G_SCALE*T/2, y:EQ_TOP+0.5, text:'t (s)',
+    showarrow:false, font:{size:12,color:'#5E7A96'}, xanchor:'center'
+  });
+
+  const layout = {
+    ...BASE_LAYOUT,
+    xaxis: {range:[-1.45, xEnd+0.15], showgrid:false, zeroline:false, showticklabels:false},
+    yaxis: {range:[yHi, yLo], showgrid:false, zeroline:false, showticklabels:false},
+    annotations,
+    shapes: [
+      // Ceiling bar
+      {type:'line',x0:-1.15,x1:1.15,y0:0,y1:0, line:{color:'#D2E0EE',width:5}},
+      // Ceiling hatch marks
+      ...Array.from({length:9},(_,i)=>({
+        type:'line',
+        x0:-1.05+i*0.26, x1:-1.17+i*0.26, y0:0, y1:-0.18,
+        line:{color:'#D2E0EE',width:1}
+      })),
+      // Equilibrium dashed line on graph
+      {type:'line',x0:G_X0,x1:xEnd,y0:EQ_TOP,y1:EQ_TOP,
+       line:{color:'#5E7A96',width:1,dash:'dot'}},
+    ],
+    updatemenus: [{
+      type:'buttons', showactive:false, y:1.08, x:0.5, xanchor:'center',
+      buttons: [
+        {label:'▶  Play', method:'animate',
+         args:[null,{frame:{duration:40,redraw:true},fromcurrent:true,mode:'immediate'}]},
+        {label:'⏸  Pause', method:'animate',
+         args:[[null],{frame:{duration:0,redraw:false},mode:'immediate'}]},
+      ]
+    }],
+    sliders: [{
+      currentvalue:{prefix:'t = ',suffix:' s',font:{size:12}},
+      pad:{t:10,b:10}, len:0.92, x:0.04,
+      steps: frames.map(f=>({
+        method:'animate',
+        label: parseFloat(f.name)%5===0 ? f.name : '',
+        args:[[f.name],{mode:'immediate',frame:{duration:0,redraw:true}}]
+      }))
+    }]
+  };
+
+  Plotly.newPlot('anim-plot', initialData, layout, CFG);
+  Plotly.addFrames('anim-plot', frames);
+}
+
+// ── Debounce ──────────────────────────────────────────────────────────────────
+let _t;
+function schedule() { clearTimeout(_t); _t=setTimeout(build, 120); }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+build();
+</script>
+</body>
+</html>

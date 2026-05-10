@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Double Pendulum</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Double Pendulum</h1>
+  <p class="demo-eq">A nonlinear ODE system — and a classic example of <em>deterministic chaos</em>.</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Masses</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">m₁ (kg) <span class="ctrl-val" id="m1-val">1.0</span></div>
+        <input type="range" id="m1-sl" min="0.1" max="5" step="0.1" value="1.0"
+               oninput="sv('m1-val',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">m₂ (kg) <span class="ctrl-val" id="m2-val">1.0</span></div>
+        <input type="range" id="m2-sl" min="0.1" max="5" step="0.1" value="1.0"
+               oninput="sv('m2-val',this.value);schedule()">
+      </div>
+
+      <div class="ctrl-section">Lengths</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">L₁ (m) <span class="ctrl-val" id="L1-val">1.0</span></div>
+        <input type="range" id="L1-sl" min="0.2" max="2" step="0.1" value="1.0"
+               oninput="sv('L1-val',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">L₂ (m) <span class="ctrl-val" id="L2-val">1.0</span></div>
+        <input type="range" id="L2-sl" min="0.2" max="2" step="0.1" value="1.0"
+               oninput="sv('L2-val',this.value);schedule()">
+      </div>
+
+      <div class="ctrl-section">Initial Angles (both from rest)</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">θ₁ (°) <span class="ctrl-val" id="th1-val">90</span></div>
+        <input type="range" id="th1-sl" min="-180" max="180" step="5" value="90"
+               oninput="sv('th1-val',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">θ₂ (°) <span class="ctrl-val" id="th2-val">102</span></div>
+        <input type="range" id="th2-sl" min="-180" max="180" step="5" value="102"
+               oninput="sv('th2-val',this.value);schedule()">
+      </div>
+
+      <div class="ctrl-section">Time</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Span T (s) <span class="ctrl-val" id="T-val">20</span></div>
+        <input type="range" id="T-sl" min="5" max="30" step="1" value="20"
+               oninput="sv('T-val',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Trail length <span class="ctrl-val" id="trail-val">60</span></div>
+        <input type="range" id="trail-sl" min="5" max="150" step="5" value="60"
+               oninput="sv('trail-val',this.value);schedule()">
+      </div>
+
+    </div><!-- /controls -->
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box">
+        <div id="anim-plot" style="height:460px;"></div>
+      </div>
+
+      <!-- Angles + phase portrait side by side -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+        <div class="plot-box">
+          <div id="angle-plot" style="height:220px;"></div>
+        </div>
+        <div class="plot-box">
+          <div id="phase-plot" style="height:220px;"></div>
+        </div>
+      </div>
+
+      <!-- Chaos expander -->
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExpander(this)">
+          <span>🔬 Sensitivity to Initial Conditions (Chaos)</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            The plot below adds a <strong>1° perturbation</strong> to θ₂ and tracks
+            the distance between the tip-2 positions of the two trajectories.
+            The rapid exponential separation is the defining signature of chaos.
+          </p>
+          <div id="chaos-plot" style="height:220px;"></div>
+        </div>
+      </div>
+
+    </div><!-- /plot-panel -->
+  </div><!-- /demo-layout -->
+</div>
+
+<script>
+const G = 9.81;
+
+// ── RK4 ───────────────────────────────────────────────────────────────────────
+function rk4(ode, y0, T, nSteps) {
+  const dt = T/nSteps;
+  const t=[0], Y=[y0.slice()];
+  for (let i=0;i<nSteps;i++){
+    const ti=t[i],yi=Y[i];
+    const k1=ode(ti,yi);
+    const k2=ode(ti+dt/2,yi.map((v,j)=>v+dt/2*k1[j]));
+    const k3=ode(ti+dt/2,yi.map((v,j)=>v+dt/2*k2[j]));
+    const k4=ode(ti+dt,  yi.map((v,j)=>v+dt*k3[j]));
+    Y.push(yi.map((v,j)=>v+dt/6*(k1[j]+2*k2[j]+2*k3[j]+k4[j])));
+    t.push(ti+dt);
+  }
+  return {t,Y};
+}
+
+// ── ODE ───────────────────────────────────────────────────────────────────────
+function makeOde(m1,m2,L1,L2) {
+  return (t,y) => {
+    const [th1,w1,th2,w2]=y;
+    const d=th1-th2, D=2*m1+m2-m2*Math.cos(2*d);
+    const dw1=(
+      -G*(2*m1+m2)*Math.sin(th1)
+      -m2*G*Math.sin(th1-2*th2)
+      -2*Math.sin(d)*m2*(w2*w2*L2+w1*w1*L1*Math.cos(d))
+    )/(L1*D);
+    const dw2=(
+      2*Math.sin(d)*(
+        w1*w1*L1*(m1+m2)
+        +G*(m1+m2)*Math.cos(th1)
+        +w2*w2*L2*m2*Math.cos(d)
+      )
+    )/(L2*D);
+    return [w1,dw1,w2,dw2];
+  };
+}
+
+// ── Plotly config ─────────────────────────────────────────────────────────────
+const CFG={displayModeBar:false,responsive:true};
+const BASE={
+  paper_bgcolor:'rgba(0,0,0,0)',
+  plot_bgcolor:'rgba(16,32,56,0.6)',
+  font:{color:'#D2E0EE',family:'system-ui,-apple-system,sans-serif'},
+  margin:{l:10,r:10,t:40,b:70},
+  showlegend:false,
+};
+const AXIS={gridcolor:'#1A304D',zerolinecolor:'#2A4060',zerolinewidth:1.5};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function sv(id,val){document.getElementById(id).textContent=parseFloat(val).toFixed(1);}
+function g(id){return parseFloat(document.getElementById(id).value);}
+const DEG=Math.PI/180;
+
+// ── Global state for chaos expander ──────────────────────────────────────────
+let _chaosOpen=false, _lastSolve=null;
+
+// ── Build ─────────────────────────────────────────────────────────────────────
+function build() {
+  const m1=g('m1-sl'),m2=g('m2-sl'),L1=g('L1-sl'),L2=g('L2-sl');
+  const th1_0=g('th1-sl')*DEG, th2_0=g('th2-sl')*DEG;
+  const T=g('T-sl'), TRAIL=parseInt(g('trail-sl'));
+
+  const ode=makeOde(m1,m2,L1,L2);
+  const {t,Y}=rk4(ode,[th1_0,0,th2_0,0],T,600);
+
+  const th1=Y.map(y=>y[0]), th2=Y.map(y=>y[2]);
+  const x1=th1.map(a=>L1*Math.sin(a)),  y1=th1.map(a=>-L1*Math.cos(a));
+  const x2=x1.map((x,i)=>x+L2*Math.sin(th2[i]));
+  const y2=y1.map((y,i)=>y-L2*Math.cos(th2[i]));
+
+  _lastSolve={m1,m2,L1,L2,th1_0,th2_0,T,t,x2,y2};
+
+  // ── Animation frames
+  const N_FRAMES=150;
+  const step=Math.max(1,Math.floor(t.length/N_FRAMES));
+  const frames=[];
+  for(let fi=0;fi<t.length;fi+=step){
+    const ts=Math.max(0,fi-TRAIL);
+    frames.push({
+      name:t[fi].toFixed(1),
+      data:[
+        {x:[0,x1[fi],x2[fi]],y:[0,y1[fi],y2[fi]]},
+        {x:[0,x1[fi],x2[fi]],y:[0,y1[fi],y2[fi]]},
+        {x:x2.slice(ts,fi+1),y:y2.slice(ts,fi+1)},
+      ]
+    });
+  }
+
+  const R=L1+L2;
+  const initData=[
+    {type:'scatter',x:[0,x1[0],x2[0]],y:[0,y1[0],y2[0]],
+     mode:'lines',line:{color:'#D2E0EE',width:3}},
+    {type:'scatter',x:[0,x1[0],x2[0]],y:[0,y1[0],y2[0]],
+     mode:'markers',marker:{color:['#444','#4A8FD4','#D44848'],size:[10,15,15],
+     line:{color:'white',width:1}}},
+    {type:'scatter',x:[x2[0]],y:[y2[0]],
+     mode:'lines',line:{color:'rgba(212,72,72,0.45)',width:1.5}},
+  ];
+
+  const animLayout={
+    ...BASE,
+    margin:{l:10,r:10,t:50,b:80},
+    xaxis:{range:[-(R+0.2),R+0.2],scaleanchor:'y',scaleratio:1,...AXIS,showticklabels:false},
+    yaxis:{range:[-(R+0.2),0.35],...AXIS,showticklabels:false},
+    shapes:[{type:'circle',xref:'x',yref:'y',x0:-0.06,y0:-0.06,x1:0.06,y1:0.06,
+             fillcolor:'#D2E0EE',line:{color:'#D2E0EE'}}],
+    updatemenus:[{
+      type:'buttons',showactive:false,y:1.08,x:0.5,xanchor:'center',
+      buttons:[
+        {label:'▶  Play',method:'animate',
+         args:[null,{frame:{duration:40,redraw:true},fromcurrent:true,mode:'immediate'}]},
+        {label:'⏸  Pause',method:'animate',
+         args:[[null],{frame:{duration:0,redraw:false},mode:'immediate'}]},
+      ]
+    }],
+    sliders:[{
+      currentvalue:{prefix:'t = ',suffix:' s',font:{size:12}},
+      pad:{t:10,b:10},len:0.92,x:0.04,
+      steps:frames.map(f=>({
+        method:'animate',
+        label:parseFloat(f.name)%5===0?f.name:'',
+        args:[[f.name],{mode:'immediate',frame:{duration:0,redraw:true}}]
+      }))
+    }]
+  };
+
+  Plotly.newPlot('anim-plot',initData,animLayout,CFG);
+  Plotly.addFrames('anim-plot',frames);
+
+  // ── Angle plot
+  Plotly.react('angle-plot',[
+    {x:t,y:th1.map(a=>a/DEG),mode:'lines',name:'θ₁',line:{color:'#4A8FD4',width:1.8}},
+    {x:t,y:th2.map(a=>a/DEG),mode:'lines',name:'θ₂',line:{color:'#D44848',width:1.8}},
+  ],{
+    ...BASE,
+    showlegend:true,
+    margin:{l:44,r:10,t:30,b:36},
+    legend:{x:0.01,y:0.99,bgcolor:'rgba(12,26,48,0.8)',bordercolor:'#1A304D',borderwidth:1,font:{size:11}},
+    title:{text:'Angles vs Time',font:{size:13}},
+    xaxis:{title:{text:'t (s)',font:{size:11}},...AXIS},
+    yaxis:{title:{text:'(°)',font:{size:11}},...AXIS},
+    shapes:[{type:'line',x0:t[0],x1:t[t.length-1],y0:0,y1:0,
+             line:{color:'#2A4060',width:1,dash:'dot'}}],
+  },CFG);
+
+  // ── Phase portrait
+  Plotly.react('phase-plot',[
+    {x:th1.map(a=>a/DEG),y:th2.map(a=>a/DEG),mode:'lines',
+     line:{color:'#8B5CF6',width:1.2,}},
+  ],{
+    ...BASE,
+    margin:{l:44,r:10,t:30,b:36},
+    title:{text:'Phase Portrait (θ₁ vs θ₂)',font:{size:13}},
+    xaxis:{title:{text:'θ₁ (°)',font:{size:11}},...AXIS},
+    yaxis:{title:{text:'θ₂ (°)',font:{size:11}},...AXIS},
+  },CFG);
+
+  // Refresh chaos plot if expander is open
+  if(_chaosOpen) drawChaos();
+}
+
+// ── Chaos comparison plot ─────────────────────────────────────────────────────
+function drawChaos() {
+  if(!_lastSolve) return;
+  const {m1,m2,L1,L2,th1_0,th2_0,T,t,x2,y2}=_lastSolve;
+  const ode=makeOde(m1,m2,L1,L2);
+  const {Y:Yp}=rk4(ode,[th1_0,0,th2_0+DEG,0],T,600);
+  const x2p=Yp.map((y,i)=>L1*Math.sin(y[0])+L2*Math.sin(y[2]));
+  const y2p=Yp.map((y,i)=>-L1*Math.cos(y[0])-L2*Math.cos(y[2]));
+  const dist=t.map((_,i)=>Math.hypot(x2[i]-x2p[i],y2[i]-y2p[i]));
+
+  Plotly.react('chaos-plot',[
+    {x:t,y:dist,mode:'lines',fill:'tozeroy',
+     fillcolor:'rgba(212,72,72,0.12)',line:{color:'#D44848',width:2}},
+  ],{
+    ...BASE,
+    margin:{l:50,r:10,t:10,b:40},
+    title:{text:'Distance between trajectories (1° perturbation in θ₂)',font:{size:12}},
+    xaxis:{title:{text:'t (s)',font:{size:11}},...AXIS},
+    yaxis:{title:{text:'|Δr| (m)',font:{size:11}},...AXIS},
+  },CFG);
+}
+
+// ── Expander ──────────────────────────────────────────────────────────────────
+function toggleExpander(head) {
+  const body=head.nextElementSibling;
+  const arrow=head.querySelector('.expander-arrow');
+  const hidden=body.classList.toggle('hidden');
+  arrow.style.transform=hidden?'':'rotate(180deg)';
+  _chaosOpen=!hidden;
+  if(_chaosOpen) drawChaos();
+}
+
+// ── Debounce ──────────────────────────────────────────────────────────────────
+let _t;
+function schedule(){clearTimeout(_t);_t=setTimeout(build,120);}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+build();
+</script>
+</body>
+</html>

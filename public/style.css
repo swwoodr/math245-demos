@@ -1,0 +1,314 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── USAFA Dark Theme ─────────────────────────────────────────────────────── */
+:root {
+  --primary:      #4A8FD4;
+  --primary-dark: #2E72B5;
+  --primary-glow: rgba(74, 143, 212, 0.22);
+  --success:      #27A96C;
+  --error:        #D44848;
+  --bg:           #070E1B;
+  --card:         #0C1A30;
+  --card-alt:     #102038;
+  --text:         #D2E0EE;
+  --muted:        #5E7A96;
+  --border:       #1A304D;
+  --silver:       #89A4BC;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 2rem 1.25rem;
+}
+
+a { color: var(--primary); }
+
+/* ── Shared button ────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-block;
+  padding: 0.625rem 1.25rem;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.btn:hover {
+  background: var(--primary-dark);
+  box-shadow: 0 0 14px var(--primary-glow);
+}
+
+/* ── Landing page grid ────────────────────────────────────────────────────── */
+.landing-wrap {
+  max-width: 860px;
+  margin: 0 auto;
+}
+.landing-wrap h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-bottom: 0.375rem;
+}
+.landing-wrap .subtitle {
+  color: var(--muted);
+  margin-bottom: 2.5rem;
+  font-size: 1rem;
+}
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+}
+.demo-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--primary);
+  border-radius: 12px;
+  padding: 1.75rem;
+  text-decoration: none;
+  color: var(--text);
+  transition: box-shadow 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+.demo-card:hover {
+  box-shadow: 0 4px 24px rgba(74,143,212,0.18);
+  border-color: var(--primary);
+}
+.demo-icon {
+  font-size: 2rem;
+  margin-bottom: 0.875rem;
+}
+.demo-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.demo-desc {
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.55;
+  flex: 1;
+  margin-bottom: 1.25rem;
+}
+.demo-launch {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* ── Demo page layout ─────────────────────────────────────────────────────── */
+.demo-wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  transition: color 0.15s;
+}
+.back-link:hover { color: var(--primary); }
+
+.demo-wrap h1 {
+  font-size: 1.625rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+.demo-eq {
+  font-size: 1rem;
+  color: var(--muted);
+  margin-bottom: 1.25rem;
+  min-height: 1.5rem;
+}
+
+.demo-layout {
+  display: grid;
+  grid-template-columns: 255px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .demo-layout { grid-template-columns: 1fr; }
+}
+
+/* ── Controls sidebar ─────────────────────────────────────────────────────── */
+.controls {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--primary);
+  border-radius: 12px;
+  padding: 1.25rem;
+  position: sticky;
+  top: 1.25rem;
+}
+.ctrl-section {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin: 1.1rem 0 0.625rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border);
+}
+.ctrl-section:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+
+.ctrl-row {
+  margin-bottom: 0.875rem;
+}
+.ctrl-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--silver);
+  margin-bottom: 0.35rem;
+}
+.ctrl-val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--primary);
+}
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+input[type="number"],
+select {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  background: var(--card-alt);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+}
+input[type="number"]:focus,
+select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+.radio-group { display: flex; flex-direction: column; gap: 0.375rem; }
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.625rem;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: border-color 0.12s, background 0.12s;
+}
+.radio-option:has(input:checked) {
+  border-color: var(--primary);
+  background: rgba(74, 143, 212, 0.1);
+}
+.radio-option input { accent-color: var(--primary); }
+
+/* ── Plot panel ───────────────────────────────────────────────────────────── */
+.plot-panel { display: flex; flex-direction: column; gap: 1rem; }
+
+.plot-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  position: relative;
+}
+
+/* ── Metric cards ─────────────────────────────────────────────────────────── */
+.metrics-row {
+  display: grid;
+  gap: 0.75rem;
+}
+.metrics-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.metrics-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 600px) {
+  .metrics-row.cols-3,
+  .metrics-row.cols-4 { grid-template-columns: repeat(2, 1fr); }
+}
+.metric {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.875rem 1rem;
+  text-align: center;
+}
+.metric-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 0.375rem;
+}
+.metric-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.metric-value.good  { color: var(--success); }
+.metric-value.plain { color: var(--text); }
+
+/* ── Expandable section ───────────────────────────────────────────────────── */
+.expander {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.expander-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem 1.25rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  user-select: none;
+  transition: background 0.12s;
+}
+.expander-head:hover { background: var(--card-alt); }
+.expander-arrow { transition: transform 0.2s; color: var(--muted); }
+.expander-body {
+  padding: 1rem 1.25rem 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.expander-body p { margin-bottom: 0.75rem; }
+.expander-body.hidden { display: none; }
+
+/* ── KaTeX overrides for dark background ─────────────────────────────────── */
+.katex { color: var(--text); }
+
+/* ── Version stamp ────────────────────────────────────────────────────────── */
+.version-footer {
+  position: fixed;
+  bottom: 0.5rem;
+  right: 0.75rem;
+  font-size: 0.6875rem;
+  color: var(--muted);
+  font-family: ui-monospace, monospace;
+  opacity: 0.45;
+  pointer-events: none;
+}
