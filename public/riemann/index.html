@@ -315,7 +315,7 @@ let _timer;
 function schedule() { clearTimeout(_timer); _timer = setTimeout(update, 80); }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
-onFuncChange();
+window.addEventListener('load', onFuncChange);
 </script>
 </body>
 </html>

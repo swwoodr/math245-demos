@@ -286,7 +286,7 @@ let _t;
 function schedule() { clearTimeout(_t); _t=setTimeout(build, 120); }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-build();
+window.addEventListener('load', build);
 </script>
 </body>
 </html>

@@ -6,98 +6,212 @@
   <title>MATH 245 — Interactive Demos</title>
   <link rel="stylesheet" href="style.css">
   <style>
+    body {
+      background: radial-gradient(ellipse at 50% 0%, #0D2040 0%, var(--bg) 65%);
+      min-height: 100vh;
+    }
+
+    .homescreen {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 3rem 2rem 5rem;
+    }
+
+    .hs-header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .hs-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.02em;
+      margin: 0 0 0.35rem;
+    }
+
+    .hs-sub {
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
     .section-label {
       font-size: 0.6875rem;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.12em;
       color: var(--muted);
-      margin: 2rem 0 0.875rem;
+      margin: 2.25rem 0 1.25rem;
       padding-bottom: 0.5rem;
       border-bottom: 1px solid var(--border);
     }
+
+    .icon-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.75rem 2rem;
+    }
+
+    /* ── Individual app icon ── */
+    .app-icon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.55rem;
+      text-decoration: none;
+      width: 80px;
+      transition: transform 0.14s ease;
+    }
+
+    .app-icon:hover  { transform: scale(1.09); }
+    .app-icon:active { transform: scale(0.93); }
+
+    .icon-tile {
+      width: 74px;
+      height: 74px;
+      border-radius: 19px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 5px 18px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.3);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Glass gloss on top half */
+    .icon-tile::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        160deg,
+        rgba(255,255,255,0.18) 0%,
+        rgba(255,255,255,0.04) 45%,
+        rgba(0,0,0,0) 100%
+      );
+      border-radius: inherit;
+    }
+
+    .icon-sym {
+      font-size: 2.1rem;
+      line-height: 1;
+      z-index: 1;
+      color: rgba(255,255,255,0.95);
+      text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+      font-family: 'Georgia', 'Times New Roman', serif;
+      user-select: none;
+    }
+
+    /* Emoji icons don't need the serif font */
+    .icon-sym.emoji {
+      font-family: inherit;
+    }
+
+    .icon-name {
+      font-size: 0.6875rem;
+      color: var(--text);
+      text-align: center;
+      line-height: 1.35;
+      font-weight: 500;
+      width: 80px;
+    }
+
+    /* ── Gradient palettes ── */
+    .ic-blue   { background: linear-gradient(145deg, #4A8FD4 0%, #1A4080 100%); }
+    .ic-purple { background: linear-gradient(145deg, #9B72E8 0%, #4C1D95 100%); }
+    .ic-teal   { background: linear-gradient(145deg, #12C289 0%, #065A40 100%); }
+    .ic-orange { background: linear-gradient(145deg, #F5A623 0%, #8B4800 100%); }
+    .ic-rose   { background: linear-gradient(145deg, #F46F7B 0%, #8B1A2A 100%); }
+    .ic-amber  { background: linear-gradient(145deg, #FA8431 0%, #7C2D12 100%); }
+    .ic-indigo { background: linear-gradient(145deg, #6E74F1 0%, #2E2B82 100%); }
+    .ic-cyan   { background: linear-gradient(145deg, #2DD4EF 0%, #0A4F62 100%); }
   </style>
 </head>
 <body>
-<div class="landing-wrap">
-  <h1>MATH 245 Interactive Demos</h1>
-  <p class="subtitle">Explore key concepts from ODEs &amp; Linear Algebra — no software required.</p>
+<div class="homescreen">
+
+  <div class="hs-header">
+    <h1 class="hs-title">MATH 245 Interactive Demos</h1>
+    <p class="hs-sub">ODEs &amp; Linear Algebra &nbsp;·&nbsp; No software required</p>
+  </div>
 
   <div class="section-label">Calculus &amp; Integration</div>
-  <div class="demo-grid">
+  <div class="icon-row">
 
-    <a class="demo-card" href="/riemann/">
-      <div class="demo-icon">∫</div>
-      <div class="demo-title">Riemann Integration</div>
-      <div class="demo-desc">Approximate the area under a curve using left, right, or midpoint rectangles. Watch error convergence on a log-log plot.</div>
-      <div class="demo-launch">Launch →</div>
+    <a class="app-icon" href="/riemann/">
+      <div class="icon-tile ic-blue">
+        <span class="icon-sym">∫</span>
+      </div>
+      <div class="icon-name">Riemann<br>Integration</div>
     </a>
 
-    <a class="demo-card" href="/fourier/">
-      <div class="demo-icon">〜</div>
-      <div class="demo-title">Fourier Series</div>
-      <div class="demo-desc">Build square, sawtooth, and triangle waves term by term. See the Gibbs phenomenon appear and watch the coefficient spectrum.</div>
-      <div class="demo-launch">Launch →</div>
+    <a class="app-icon" href="/fourier/">
+      <div class="icon-tile ic-purple">
+        <span class="icon-sym">≈</span>
+      </div>
+      <div class="icon-name">Fourier<br>Series</div>
     </a>
 
   </div>
 
   <div class="section-label">Numerical Methods</div>
-  <div class="demo-grid">
+  <div class="icon-row">
 
-    <a class="demo-card" href="/euler/">
-      <div class="demo-icon">→</div>
-      <div class="demo-title">Euler's Method</div>
-      <div class="demo-desc">Step along tangent lines to approximate ODE solutions. Adjust step size and see how error accumulates. Includes a step-by-step table.</div>
-      <div class="demo-launch">Launch →</div>
+    <a class="app-icon" href="/euler/">
+      <div class="icon-tile ic-teal">
+        <span class="icon-sym">∂</span>
+      </div>
+      <div class="icon-name">Euler's<br>Method</div>
     </a>
 
   </div>
 
   <div class="section-label">Second-Order ODEs</div>
-  <div class="demo-grid">
+  <div class="icon-row">
 
-    <a class="demo-card" href="/smd/">
-      <div class="demo-icon">🌀</div>
-      <div class="demo-title">Spring-Mass-Damper</div>
-      <div class="demo-desc">Animate the solution to my″ + cy′ + ky = 0. See underdamped, critically damped, and overdamped behavior with live characteristic roots.</div>
-      <div class="demo-launch">Launch →</div>
+    <a class="app-icon" href="/smd/">
+      <div class="icon-tile ic-orange">
+        <span class="icon-sym emoji">🌀</span>
+      </div>
+      <div class="icon-name">Spring-Mass-<br>Damper</div>
     </a>
 
-    <a class="demo-card" href="/resonance/">
-      <div class="demo-icon">📡</div>
-      <div class="demo-title">Forced Oscillations &amp; Resonance</div>
-      <div class="demo-desc">Drive a spring-mass system with F·cos(ωt). Sweep the forcing frequency toward ωₙ and watch the amplitude curve peak at resonance.</div>
-      <div class="demo-launch">Launch →</div>
+    <a class="app-icon" href="/resonance/">
+      <div class="icon-tile ic-rose">
+        <span class="icon-sym">ω</span>
+      </div>
+      <div class="icon-name">Forced<br>Oscillations</div>
     </a>
 
-    <a class="demo-card" href="/rlc/">
-      <div class="demo-icon">⚡</div>
-      <div class="demo-title">Series RLC Circuit</div>
-      <div class="demo-desc">The electrical analog of the spring-mass system. Explore the step response of capacitor voltage and current with the mechanical analogy table.</div>
-      <div class="demo-launch">Launch →</div>
+    <a class="app-icon" href="/rlc/">
+      <div class="icon-tile ic-amber">
+        <span class="icon-sym emoji">⚡</span>
+      </div>
+      <div class="icon-name">Series RLC<br>Circuit</div>
     </a>
 
   </div>
 
   <div class="section-label">Systems &amp; Nonlinear Dynamics</div>
-  <div class="demo-grid">
+  <div class="icon-row">
 
-    <a class="demo-card" href="/trdet/">
-      <div class="demo-icon">📐</div>
-      <div class="demo-title">Trace-Determinant Plane</div>
-      <div class="demo-desc">Classify equilibria of x′ = Ax by dragging a point on the T-D plane. Watch the phase portrait switch between nodes, spirals, saddles, and centers.</div>
-      <div class="demo-launch">Launch →</div>
+    <a class="app-icon" href="/trdet/">
+      <div class="icon-tile ic-indigo">
+        <span class="icon-sym">λ</span>
+      </div>
+      <div class="icon-name">Trace-Det<br>Plane</div>
     </a>
 
-    <a class="demo-card" href="/pendulum/">
-      <div class="demo-icon">⚖️</div>
-      <div class="demo-title">Double Pendulum</div>
-      <div class="demo-desc">A nonlinear ODE system and a classic example of deterministic chaos. Explore sensitive dependence on initial conditions.</div>
-      <div class="demo-launch">Launch →</div>
+    <a class="app-icon" href="/pendulum/">
+      <div class="icon-tile ic-cyan">
+        <span class="icon-sym">∞</span>
+      </div>
+      <div class="icon-name">Double<br>Pendulum</div>
     </a>
 
   </div>
+
 </div>
 </body>
 </html>
