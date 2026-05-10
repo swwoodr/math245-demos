@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trace-Determinant Plane</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    /* Override to allow wider two-column plot layout */
+    .two-plots { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    @media(max-width:860px){ .two-plots { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Trace-Determinant Plane</h1>
+  <p class="demo-eq">Classify the equilibrium of $\mathbf{x}' = A\mathbf{x}$ by its trace $T$ and determinant $D$</p>
+
+  <!-- Override layout: controls top, two plots side by side -->
+  <div class="demo-layout">
+    <div class="controls">
+
+      <div class="ctrl-section">System Matrix</div>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;line-height:1.5;">
+        Control the trace $T = a+d$ and determinant $D = ad-bc$ directly, or enter matrix entries below.
+      </p>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">Trace T <span class="ctrl-val" id="T-v">1.0</span></div>
+        <input type="range" id="T-s" min="-4" max="4" step="0.1" value="1.0"
+               oninput="document.getElementById('T-v').textContent=parseFloat(this.value).toFixed(1);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Det D <span class="ctrl-val" id="D-v">2.0</span></div>
+        <input type="range" id="D-s" min="-3" max="5" step="0.1" value="2.0"
+               oninput="document.getElementById('D-v').textContent=parseFloat(this.value).toFixed(1);schedule()">
+      </div>
+
+      <div class="ctrl-section">Matrix Entries (optional)</div>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.5rem;">
+        Enter $A = \begin{pmatrix}a & b \\ c & d\end{pmatrix}$ to auto-set T and D.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:0.5rem;">
+        <div>
+          <div class="ctrl-label" style="margin-bottom:0.25rem;">a</div>
+          <input type="number" id="ma" value="" step="0.1" placeholder="—"
+                 oninput="fromMatrix()" style="width:100%;padding:0.4rem 0.5rem;">
+        </div>
+        <div>
+          <div class="ctrl-label" style="margin-bottom:0.25rem;">b</div>
+          <input type="number" id="mb" value="" step="0.1" placeholder="—"
+                 oninput="fromMatrix()" style="width:100%;padding:0.4rem 0.5rem;">
+        </div>
+        <div>
+          <div class="ctrl-label" style="margin-bottom:0.25rem;">c</div>
+          <input type="number" id="mc" value="" step="0.1" placeholder="—"
+                 oninput="fromMatrix()" style="width:100%;padding:0.4rem 0.5rem;">
+        </div>
+        <div>
+          <div class="ctrl-label" style="margin-bottom:0.25rem;">d</div>
+          <input type="number" id="md" value="" step="0.1" placeholder="—"
+                 oninput="fromMatrix()" style="width:100%;padding:0.4rem 0.5rem;">
+        </div>
+      </div>
+
+      <div class="ctrl-section">Phase Portrait</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">IC radius <span class="ctrl-val" id="r-v">1.0</span></div>
+        <input type="range" id="r-s" min="0.3" max="3" step="0.1" value="1.0"
+               oninput="sv('r-v',this.value);schedule()">
+      </div>
+
+    </div>
+
+    <div class="plot-panel">
+      <div class="two-plots">
+        <div class="plot-box"><div id="td-plot"    style="height:380px;"></div></div>
+        <div class="plot-box"><div id="phase-plot" style="height:380px;"></div></div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Classification</div>
+          <div class="metric-value plain" id="m-class">—</div></div>
+        <div class="metric"><div class="metric-label">Stability</div>
+          <div class="metric-value" id="m-stab">—</div></div>
+        <div class="metric"><div class="metric-label">λ₁</div>
+          <div class="metric-value" id="m-l1">—</div></div>
+        <div class="metric"><div class="metric-label">λ₂</div>
+          <div class="metric-value" id="m-l2">—</div></div>
+      </div>
+
+      <div id="eigen-box" style="text-align:center;padding:0.25rem;min-height:2.5rem;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── RK4 for linear system x' = Ax ────────────────────────────────────────────
+function integrateLin(A, y0, tEnd, dt) {
+  const f=(_,y)=>[A[0][0]*y[0]+A[0][1]*y[1], A[1][0]*y[0]+A[1][1]*y[1]];
+  let t=0, y=y0.slice();
+  const xs=[y[0]], ys=[y[1]];
+  const steps=Math.ceil(tEnd/Math.abs(dt));
+  const dts=dt; // can be negative for backward integration
+  for(let i=0;i<steps;i++){
+    if(Math.hypot(y[0],y[1])>8) break;
+    const k1=f(t,y);
+    const k2=f(t+dts/2,y.map((v,j)=>v+dts/2*k1[j]));
+    const k3=f(t+dts/2,y.map((v,j)=>v+dts/2*k2[j]));
+    const k4=f(t+dts,  y.map((v,j)=>v+dts*k3[j]));
+    y=y.map((v,j)=>v+dts/6*(k1[j]+2*k2[j]+2*k3[j]+k4[j]));
+    t+=dts;
+    if(Math.hypot(y[0],y[1])>8) break;
+    xs.push(y[0]); ys.push(y[1]);
+  }
+  return {xs,ys};
+}
+
+const CFG={displayModeBar:false,responsive:true};
+const BASE={paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+            font:{color:'#D2E0EE',family:'system-ui,-apple-system,sans-serif'},
+            margin:{l:44,r:16,t:30,b:44}};
+const AX={gridcolor:'#1A304D',zerolinecolor:'#2A4060',zerolinewidth:1.5};
+
+function sv(id,v){document.getElementById(id).textContent=parseFloat(v).toFixed(1);}
+function g(id){return parseFloat(document.getElementById(id).value);}
+
+// ── Region coloring for T-D background ───────────────────────────────────────
+function regionColor(T,D){
+  if(D<0)             return 'rgba(212,72,72,0.30)';   // saddle
+  const disc=T*T-4*D;
+  if(Math.abs(T)<0.08) return 'rgba(150,80,220,0.30)'; // center/imaginary axis
+  if(T<0) return disc>0 ? 'rgba(39,120,200,0.32)' : 'rgba(39,169,108,0.30)'; // stable
+  return            disc>0 ? 'rgba(232,144,60,0.32)' : 'rgba(212,72,72,0.25)'; // unstable
+}
+
+function makeTDBackground(){
+  const Ts=Array.from({length:81},(_,i)=>-4+i*0.1);
+  const Ds=Array.from({length:81},(_,i)=>-3+i*0.1);
+  const xs=[],ys=[],colors=[];
+  for(const D of Ds) for(const T of Ts){ xs.push(T);ys.push(D);colors.push(regionColor(T,D)); }
+  return {type:'scatter',x:xs,y:ys,mode:'markers',
+          marker:{color:colors,size:7,symbol:'square'},
+          showlegend:false,hoverinfo:'skip'};
+}
+
+const BG = makeTDBackground(); // computed once
+
+// Legend patches for T-D plane
+const LEGEND_PATCHES=[
+  {x:[-4,-4,-1,-1],y:[-3,-0.01,-0.01,-3],fill:'toself',fillcolor:'rgba(212,72,72,0.18)',
+   line:{width:0},mode:'lines',name:'Saddle',showlegend:true},
+  {x:[-4,-4,-0.08,-0.08],y:[0.01,5,5,0.01],fill:'toself',fillcolor:'rgba(39,120,200,0.12)',
+   line:{width:0},mode:'lines',name:'Stable',showlegend:true},
+  {x:[0.08,0.08,4,4],y:[0.01,5,5,0.01],fill:'toself',fillcolor:'rgba(212,72,72,0.12)',
+   line:{width:0},mode:'lines',name:'Unstable',showlegend:true},
+];
+
+// Parabola T² = 4D
+const Tpar=Array.from({length:200},(_,i)=>-4+i*8/199);
+const Dpar=Tpar.map(t=>t*t/4);
+
+function build(){
+  const T=g('T-s'), D=g('D-s'), R=g('r-s');
+
+  // Matrix: companion form — trace T, det D
+  // A = [[0,1],[-D,T]] works but gives asymmetric portrait.
+  // Use symmetric-ish: a=(T+sqrt(T²-4D))/2 ... or just use companion.
+  const A=[[0,1],[-D,T]];
+
+  // Eigenvalues
+  const disc=T*T-4*D;
+  let l1str,l2str,classStr,stabStr,stabColor;
+
+  if(disc>=0){
+    const l1=( T+Math.sqrt(disc))/2;
+    const l2=( T-Math.sqrt(disc))/2;
+    l1str=l1.toFixed(3); l2str=l2.toFixed(3);
+    if(D<0){ classStr='Saddle'; stabStr='Unstable'; stabColor='#D44848'; }
+    else if(Math.abs(l1-l2)<1e-8){ classStr='Degenerate Node'; stabStr=T<0?'Stable':'Unstable'; stabColor=T<0?'#27A96C':'#D44848'; }
+    else{ classStr=T<0?'Stable Node':'Unstable Node'; stabStr=T<0?'Stable':'Unstable'; stabColor=T<0?'#27A96C':'#D44848'; }
+  } else {
+    const re=T/2, im=Math.sqrt(-disc)/2;
+    l1str=`${re.toFixed(3)} + ${im.toFixed(3)}i`;
+    l2str=`${re.toFixed(3)} − ${im.toFixed(3)}i`;
+    if(Math.abs(T)<0.08){ classStr='Center'; stabStr='Neutrally Stable'; stabColor='#89A4BC'; }
+    else{ classStr=T<0?'Stable Spiral':'Unstable Spiral'; stabStr=T<0?'Stable':'Unstable'; stabColor=T<0?'#27A96C':'#D44848'; }
+  }
+
+  document.getElementById('m-class').textContent=classStr;
+  document.getElementById('m-stab').textContent=stabStr;
+  document.getElementById('m-stab').style.color=stabColor;
+  document.getElementById('m-l1').textContent=l1str;
+  document.getElementById('m-l2').textContent=l2str;
+
+  // Eigenvalue latex
+  const discF=disc>=0
+    ? `\\lambda = \\dfrac{${T.toFixed(2)} \\pm \\sqrt{${disc.toFixed(2)}}}{2}`
+    : `\\lambda = ${(T/2).toFixed(3)} \\pm ${(Math.sqrt(-disc)/2).toFixed(3)}\\,i`;
+  document.getElementById('eigen-box').innerHTML=
+    katex.renderToString(discF,{throwOnError:false,displayMode:true});
+
+  // ── T-D plane ────────────────────────────────────────────────────────────
+  const tdTraces=[
+    BG,
+    ...LEGEND_PATCHES,
+    // Parabola
+    {x:Tpar,y:Dpar,mode:'lines',line:{color:'#D2E0EE',width:2},
+     name:'T²=4D',showlegend:true},
+    // T-axis
+    {x:[-4,4],y:[0,0],mode:'lines',line:{color:'#89A4BC',width:1,dash:'dot'},
+     showlegend:false},
+    // Current point
+    {x:[T],y:[D],mode:'markers',
+     marker:{color:'#FFD700',size:16,symbol:'diamond',
+             line:{color:'white',width:2}},
+     name:`(T,D)=(${T.toFixed(1)},${D.toFixed(1)})`,showlegend:true},
+  ];
+
+  Plotly.react('td-plot',tdTraces,{
+    ...BASE,
+    title:{text:'Trace-Determinant Plane',font:{size:13}},
+    showlegend:true,
+    legend:{x:0.01,y:0.99,bgcolor:'rgba(12,26,48,0.85)',bordercolor:'#1A304D',
+            borderwidth:1,font:{size:10}},
+    xaxis:{title:'T (trace)',range:[-4.2,4.2],...AX},
+    yaxis:{title:'D (det)',  range:[-3.2,5.2],...AX},
+    annotations:[
+      {x:-2.5,y:-1.5,text:'Saddle',showarrow:false,font:{color:'#D44848',size:11}},
+      {x:-2.5,y:3.5,text:'Stable',showarrow:false,font:{color:'#4A8FD4',size:11}},
+      {x:2.5,y:3.5,text:'Unstable',showarrow:false,font:{color:'#E87040',size:11}},
+      {x:0,y:5.0,text:'T²=4D',showarrow:false,yanchor:'top',font:{color:'#D2E0EE',size:10}},
+    ],
+  },CFG);
+
+  // ── Phase portrait ───────────────────────────────────────────────────────
+  const N_IC=8, tFwd=12, tBwd=6;
+  const phaseTraces=[];
+  const colors=['#4A8FD4','#27A96C','#E87040','#D44848','#89A4BC','#8B5CF6','#FFD700','#E8C040'];
+
+  for(let i=0;i<N_IC;i++){
+    const angle=i*2*Math.PI/N_IC;
+    const ic=[R*Math.cos(angle), R*Math.sin(angle)];
+    // Forward
+    const fwd=integrateLin(A,ic,tFwd,0.02);
+    phaseTraces.push({x:fwd.xs,y:fwd.ys,mode:'lines',
+      line:{color:colors[i%colors.length],width:1.8},showlegend:false});
+    // Backward (for saddles / stable systems)
+    const bwd=integrateLin(A,ic,tBwd,-0.02);
+    phaseTraces.push({x:bwd.xs,y:bwd.ys,mode:'lines',
+      line:{color:colors[i%colors.length],width:1.8,dash:'dot'},showlegend:false});
+  }
+
+  // Equilibrium at origin
+  phaseTraces.push({x:[0],y:[0],mode:'markers',
+    marker:{color:'#FFD700',size:10,symbol:'circle',line:{color:'white',width:1.5}},
+    showlegend:false});
+
+  Plotly.react('phase-plot',phaseTraces,{
+    ...BASE,
+    title:{text:`Phase Portrait — ${classStr}`,font:{size:13}},
+    xaxis:{title:'x₁',range:[-5,5],...AX},
+    yaxis:{title:'x₂',range:[-5,5],scaleanchor:'x',scaleratio:1,...AX},
+    showlegend:false,
+  },CFG);
+}
+
+// ── Matrix entry → T, D ───────────────────────────────────────────────────────
+function fromMatrix(){
+  const a=parseFloat(document.getElementById('ma').value);
+  const b=parseFloat(document.getElementById('mb').value);
+  const c=parseFloat(document.getElementById('mc').value);
+  const d=parseFloat(document.getElementById('md').value);
+  if(![a,b,c,d].every(isFinite)) return;
+  const T=a+d, D=a*d-b*c;
+  const Tclamped=Math.max(-4,Math.min(4,T));
+  const Dclamped=Math.max(-3,Math.min(5,D));
+  document.getElementById('T-s').value=Tclamped;
+  document.getElementById('D-s').value=Dclamped;
+  document.getElementById('T-v').textContent=T.toFixed(1);
+  document.getElementById('D-v').textContent=D.toFixed(1);
+  schedule();
+}
+
+let _t;
+function schedule(){clearTimeout(_t);_t=setTimeout(build,80);}
+build();
+</script>
+</body>
+</html>

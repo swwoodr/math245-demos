@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fourier Series</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Fourier Series</h1>
+  <p class="demo-eq">$S_N(x) = \dfrac{a_0}{2} + \displaystyle\sum_{n=1}^{N}\bigl[a_n\cos(nx)+b_n\sin(nx)\bigr]$</p>
+
+  <div class="demo-layout">
+    <div class="controls">
+
+      <div class="ctrl-section">Target Function</div>
+      <div class="ctrl-row">
+        <select id="func-sel" onchange="onFuncChange()">
+          <option value="square">Square wave</option>
+          <option value="sawtooth">Sawtooth wave</option>
+          <option value="triangle">Triangle wave</option>
+          <option value="abssin">|sin(x)|</option>
+          <option value="halfsin">Half-rectified sine</option>
+        </select>
+      </div>
+
+      <div class="ctrl-section">Terms</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">N (terms) <span class="ctrl-val" id="N-v">5</span></div>
+        <input type="range" id="N-s" min="1" max="50" step="1" value="5"
+               oninput="document.getElementById('N-v').textContent=this.value;schedule()">
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-harm" onchange="build()">
+          Show individual harmonics
+        </label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-err" onchange="build()">
+          Show pointwise error
+        </label>
+      </div>
+
+      <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border);">
+        <div id="coeff-box" style="font-size:0.8rem;color:var(--muted);line-height:1.8;"></div>
+      </div>
+
+    </div>
+
+    <div class="plot-panel">
+      <div class="plot-box"><div id="main-plot" style="height:360px;"></div></div>
+      <div class="plot-box"><div id="spec-plot" style="height:220px;"></div></div>
+
+      <div class="metrics-row cols-3">
+        <div class="metric"><div class="metric-label">N Terms</div><div class="metric-value" id="m-N">—</div></div>
+        <div class="metric"><div class="metric-label">Max |Error|</div><div class="metric-value" id="m-err">—</div></div>
+        <div class="metric"><div class="metric-label">RMS Error</div><div class="metric-value" id="m-rms">—</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PI = Math.PI;
+
+// ── Function definitions ──────────────────────────────────────────────────────
+const FUNCS = {
+  square:   {
+    f: x => x > 0 && x < PI ? 1 : (x === 0 || x === PI ? 0 : -1),
+    label: 'Square wave',
+    latex: 'f(x)=\\begin{cases}1 & 0<x<\\pi \\\\ -1 & -\\pi<x<0\\end{cases}',
+  },
+  sawtooth: {
+    f: x => x / PI,
+    label: 'Sawtooth wave',
+    latex: 'f(x) = x/\\pi',
+  },
+  triangle: {
+    f: x => 1 - 2*Math.abs(x)/PI,
+    label: 'Triangle wave',
+    latex: 'f(x) = 1 - 2|x|/\\pi',
+  },
+  abssin: {
+    f: x => Math.abs(Math.sin(x)),
+    label: '|sin(x)|',
+    latex: 'f(x) = |\\sin x|',
+  },
+  halfsin: {
+    f: x => Math.max(Math.sin(x), 0),
+    label: 'Half-rectified sine',
+    latex: 'f(x) = \\max(\\sin x,\\, 0)',
+  },
+};
+
+// ── Numerical Fourier coefficients (composite Simpson's on [-π, π]) ───────────
+function fourierCoeffs(f, maxN) {
+  const M = 2000; const h = 2*PI/M;
+  // Precompute f values on [-π, π]
+  const xs = Array.from({length:M+1}, (_,i) => -PI + i*h);
+  const fs = xs.map(f);
+
+  // Weights for Simpson's rule
+  const w = Array.from({length:M+1}, (_,i) =>
+    i===0||i===M ? 1 : i%2===0 ? 2 : 4);
+
+  const a = [0], b = [0]; // index 0 unused for b; a[0] = a0
+
+  // a0
+  let s = fs.reduce((acc,fv,i) => acc + w[i]*fv, 0) * h/3;
+  a[0] = s/PI;
+
+  for(let n=1; n<=maxN; n++){
+    let sa=0, sb=0;
+    for(let i=0;i<=M;i++){
+      sa += w[i]*fs[i]*Math.cos(n*xs[i]);
+      sb += w[i]*fs[i]*Math.sin(n*xs[i]);
+    }
+    a.push(sa*h/(3*PI));
+    b.push(sb*h/(3*PI));
+  }
+  return {a, b};
+}
+
+// Partial sum at x given coefficients
+function partialSum(x, a, b, N) {
+  let s = a[0]/2;
+  for(let n=1; n<=N; n++) s += a[n]*Math.cos(n*x) + b[n]*Math.sin(n*x);
+  return s;
+}
+
+const CFG={displayModeBar:false,responsive:true};
+const BASE={paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+            font:{color:'#D2E0EE',family:'system-ui,-apple-system,sans-serif'},
+            margin:{l:44,r:16,t:20,b:44}};
+const AX={gridcolor:'#1A304D',zerolinecolor:'#2A4060',zerolinewidth:1.5};
+
+// Cache coefficients per function
+const coeffCache = {};
+const MAX_N = 50;
+
+function getCoeffs(key) {
+  if (!coeffCache[key]) {
+    coeffCache[key] = fourierCoeffs(FUNCS[key].f, MAX_N);
+  }
+  return coeffCache[key];
+}
+
+function build() {
+  const key = document.getElementById('func-sel').value;
+  const N   = parseInt(document.getElementById('N-s').value);
+  const showHarm = document.getElementById('show-harm').checked;
+  const showErr  = document.getElementById('show-err').checked;
+  const fn  = FUNCS[key];
+  const {a, b} = getCoeffs(key);
+
+  // x grid over [-π, π] (slightly inside to avoid jump discontinuities)
+  const xFull = Array.from({length:501}, (_,i) => -PI + i*2*PI/500);
+  const yTrue = xFull.map(fn.f);
+  const yApprox = xFull.map(x => partialSum(x, a, b, N));
+  const err = xFull.map((x,i) => Math.abs(yApprox[i] - yTrue[i]));
+
+  const maxErr = Math.max(...err);
+  const rmsErr = Math.sqrt(err.reduce((s,e)=>s+e*e,0)/err.length);
+
+  document.getElementById('m-N').textContent = N;
+  document.getElementById('m-err').textContent = maxErr.toExponential(2);
+  document.getElementById('m-rms').textContent = rmsErr.toExponential(2);
+
+  const traces = [];
+
+  // Individual harmonics (optional)
+  if (showHarm) {
+    const harmColors = ['#89A4BC','#7A6EAA','#5E8A6A','#7A8E4A','#8A6A4A'];
+    for(let n=1; n<=Math.min(N,5); n++){
+      const yH = xFull.map(x => a[n]*Math.cos(n*x) + b[n]*Math.sin(n*x));
+      traces.push({x:xFull, y:yH, mode:'lines',
+        line:{color:harmColors[(n-1)%5], width:1, dash:'dot'},
+        name:`n=${n}`, opacity:0.7});
+    }
+  }
+
+  // Error trace (optional)
+  if (showErr) {
+    traces.push({x:xFull, y:err, mode:'lines',
+      line:{color:'#D44848',width:1.2, dash:'dash'}, name:'|Error|',
+      yaxis:'y2', showlegend:true});
+  }
+
+  // True function
+  traces.push({x:xFull, y:yTrue, mode:'lines',
+    line:{color:'#5E7A96',width:2, dash:'dot'}, name:`f(x) — ${fn.label}`});
+
+  // Partial sum
+  traces.push({x:xFull, y:yApprox, mode:'lines',
+    line:{color:'#4A8FD4',width:2.5}, name:`S${N}(x)`});
+
+  const layout2 = showErr ? {
+    yaxis2:{overlaying:'y',side:'right',title:'|Error|',
+            gridcolor:'#1A304D',showgrid:false,
+            tickfont:{color:'#D44848',size:10},titlefont:{color:'#D44848',size:11}},
+  } : {};
+
+  Plotly.react('main-plot', traces, {
+    ...BASE, ...layout2,
+    showlegend:true,
+    legend:{x:0.01,y:0.99,bgcolor:'rgba(12,26,48,0.8)',bordercolor:'#1A304D',borderwidth:1,font:{size:11}},
+    xaxis:{title:'x', tickvals:[-PI,-PI/2,0,PI/2,PI],
+           ticktext:['-π','-π/2','0','π/2','π'],...AX},
+    yaxis:{title:'y',...AX},
+  }, CFG);
+
+  // Spectrum plot: bar chart of sqrt(an² + bn²) for n = 1..N
+  const nVals = Array.from({length:MAX_N},(_,i)=>i+1);
+  const amps  = nVals.map(n => Math.sqrt(a[n]**2 + b[n]**2));
+  const barColors = nVals.map(n => n<=N ? '#4A8FD4' : 'rgba(74,143,212,0.2)');
+
+  Plotly.react('spec-plot',[
+    {type:'bar', x:nVals, y:amps,
+     marker:{color:barColors,line:{color:'rgba(0,0,0,0)',width:0}},
+     name:'|cₙ|'},
+  ],{
+    ...BASE,
+    margin:{l:44,r:16,t:30,b:44},
+    title:{text:'Coefficient Spectrum  √(aₙ² + bₙ²)',font:{size:13}},
+    xaxis:{title:'n',...AX, range:[0,MAX_N+1]},
+    yaxis:{title:'Amplitude',...AX},
+    showlegend:false,
+    bargap:0.15,
+  }, CFG);
+
+  // Coefficient summary box
+  const lines = [];
+  if(Math.abs(a[0]) > 1e-8) lines.push(`a₀/2 = ${(a[0]/2).toFixed(4)}`);
+  for(let n=1; n<=Math.min(N,5); n++){
+    if(Math.abs(a[n])>1e-8) lines.push(`a${n} = ${a[n].toFixed(4)}`);
+    if(Math.abs(b[n])>1e-8) lines.push(`b${n} = ${b[n].toFixed(4)}`);
+  }
+  if(N>5) lines.push(`… (${N} terms total)`);
+  document.getElementById('coeff-box').innerHTML = lines.join('<br>');
+}
+
+function onFuncChange() { build(); }
+function toggleExp(head){
+  const body=head.nextElementSibling,arrow=head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrow.style.transform=body.classList.contains('hidden')?'':'rotate(180deg)';
+}
+
+let _t;
+function schedule(){clearTimeout(_t);_t=setTimeout(build,80);}
+build();
+</script>
+</body>
+</html>

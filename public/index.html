@@ -5,47 +5,99 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MATH 245 — Interactive Demos</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    .section-label {
+      font-size: 0.6875rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin: 2rem 0 0.875rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+  </style>
 </head>
 <body>
-  <div class="landing-wrap">
-    <h1>MATH 245 Interactive Demos</h1>
-    <p class="subtitle">Explore key concepts from ODEs &amp; Linear Algebra — no software required.</p>
+<div class="landing-wrap">
+  <h1>MATH 245 Interactive Demos</h1>
+  <p class="subtitle">Explore key concepts from ODEs &amp; Linear Algebra — no software required.</p>
 
-    <div class="demo-grid">
+  <div class="section-label">Calculus &amp; Integration</div>
+  <div class="demo-grid">
 
-      <a class="demo-card" href="/riemann/">
-        <div class="demo-icon">∫</div>
-        <div class="demo-title">Riemann Integration</div>
-        <div class="demo-desc">
-          Approximate the area under a curve using left-endpoint, right-endpoint,
-          or midpoint rectangles. Watch convergence on a log-log plot.
-        </div>
-        <div class="demo-launch">Launch →</div>
-      </a>
+    <a class="demo-card" href="/riemann/">
+      <div class="demo-icon">∫</div>
+      <div class="demo-title">Riemann Integration</div>
+      <div class="demo-desc">Approximate the area under a curve using left, right, or midpoint rectangles. Watch error convergence on a log-log plot.</div>
+      <div class="demo-launch">Launch →</div>
+    </a>
 
-      <a class="demo-card" href="/smd/">
-        <div class="demo-icon">🌀</div>
-        <div class="demo-title">Spring-Mass-Damper</div>
-        <div class="demo-desc">
-          Animate the solution to <em>my″ + cy′ + ky = 0</em>. Adjust mass,
-          damping, and spring constant and see underdamped, critically damped,
-          and overdamped behavior in real time.
-        </div>
-        <div class="demo-launch">Launch →</div>
-      </a>
+    <a class="demo-card" href="/fourier/">
+      <div class="demo-icon">〜</div>
+      <div class="demo-title">Fourier Series</div>
+      <div class="demo-desc">Build square, sawtooth, and triangle waves term by term. See the Gibbs phenomenon appear and watch the coefficient spectrum.</div>
+      <div class="demo-launch">Launch →</div>
+    </a>
 
-      <a class="demo-card" href="/pendulum/">
-        <div class="demo-icon">⚖️</div>
-        <div class="demo-title">Double Pendulum</div>
-        <div class="demo-desc">
-          A nonlinear ODE system and a classic example of deterministic chaos.
-          Explore sensitive dependence on initial conditions with the built-in
-          perturbation comparison.
-        </div>
-        <div class="demo-launch">Launch →</div>
-      </a>
-
-    </div>
   </div>
+
+  <div class="section-label">Numerical Methods</div>
+  <div class="demo-grid">
+
+    <a class="demo-card" href="/euler/">
+      <div class="demo-icon">→</div>
+      <div class="demo-title">Euler's Method</div>
+      <div class="demo-desc">Step along tangent lines to approximate ODE solutions. Adjust step size and see how error accumulates. Includes a step-by-step table.</div>
+      <div class="demo-launch">Launch →</div>
+    </a>
+
+  </div>
+
+  <div class="section-label">Second-Order ODEs</div>
+  <div class="demo-grid">
+
+    <a class="demo-card" href="/smd/">
+      <div class="demo-icon">🌀</div>
+      <div class="demo-title">Spring-Mass-Damper</div>
+      <div class="demo-desc">Animate the solution to my″ + cy′ + ky = 0. See underdamped, critically damped, and overdamped behavior with live characteristic roots.</div>
+      <div class="demo-launch">Launch →</div>
+    </a>
+
+    <a class="demo-card" href="/resonance/">
+      <div class="demo-icon">📡</div>
+      <div class="demo-title">Forced Oscillations &amp; Resonance</div>
+      <div class="demo-desc">Drive a spring-mass system with F·cos(ωt). Sweep the forcing frequency toward ωₙ and watch the amplitude curve peak at resonance.</div>
+      <div class="demo-launch">Launch →</div>
+    </a>
+
+    <a class="demo-card" href="/rlc/">
+      <div class="demo-icon">⚡</div>
+      <div class="demo-title">Series RLC Circuit</div>
+      <div class="demo-desc">The electrical analog of the spring-mass system. Explore the step response of capacitor voltage and current with the mechanical analogy table.</div>
+      <div class="demo-launch">Launch →</div>
+    </a>
+
+  </div>
+
+  <div class="section-label">Systems &amp; Nonlinear Dynamics</div>
+  <div class="demo-grid">
+
+    <a class="demo-card" href="/trdet/">
+      <div class="demo-icon">📐</div>
+      <div class="demo-title">Trace-Determinant Plane</div>
+      <div class="demo-desc">Classify equilibria of x′ = Ax by dragging a point on the T-D plane. Watch the phase portrait switch between nodes, spirals, saddles, and centers.</div>
+      <div class="demo-launch">Launch →</div>
+    </a>
+
+    <a class="demo-card" href="/pendulum/">
+      <div class="demo-icon">⚖️</div>
+      <div class="demo-title">Double Pendulum</div>
+      <div class="demo-desc">A nonlinear ODE system and a classic example of deterministic chaos. Explore sensitive dependence on initial conditions.</div>
+      <div class="demo-launch">Launch →</div>
+    </a>
+
+  </div>
+</div>
 </body>
 </html>

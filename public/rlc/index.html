@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Series RLC Circuit</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .analogy-table { width:100%; border-collapse:collapse; font-size:0.875rem; }
+    .analogy-table th { background:var(--card-alt); color:var(--muted); font-weight:600;
+                        text-transform:uppercase; letter-spacing:0.06em; font-size:0.75rem;
+                        padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); text-align:left; }
+    .analogy-table td { padding:0.45rem 0.75rem; border-bottom:1px solid var(--border); color:var(--text); }
+    .analogy-table tr:last-child td { border-bottom:none; }
+    .analogy-table .hi { color:var(--primary); font-weight:600; }
+
+    .circuit-svg { display:block; margin:0 auto; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Series RLC Circuit</h1>
+  <p class="demo-eq">$L\,q'' + R\,q' + \dfrac{1}{C}\,q = V_0$ &nbsp;(step input)</p>
+
+  <div class="demo-layout">
+    <div class="controls">
+
+      <div class="ctrl-section">Circuit Parameters</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Resistance R (Ω) <span class="ctrl-val" id="R-v">2.0</span></div>
+        <input type="range" id="R-s" min="0" max="10" step="0.25" value="2.0"
+               oninput="sv('R-v',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Inductance L (H) <span class="ctrl-val" id="L-v">1.0</span></div>
+        <input type="range" id="L-s" min="0.1" max="5" step="0.1" value="1.0"
+               oninput="sv('L-v',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Capacitance C (F) <span class="ctrl-val" id="C-v">0.25</span></div>
+        <input type="range" id="C-s" min="0.05" max="2" step="0.05" value="0.25"
+               oninput="sv('C-v',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Source Voltage V₀ (V) <span class="ctrl-val" id="V-v">5.0</span></div>
+        <input type="range" id="V-s" min="1" max="20" step="1" value="5.0"
+               oninput="sv('V-v',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time Span T (s) <span class="ctrl-val" id="T-v">20</span></div>
+        <input type="range" id="T-s" min="5" max="60" step="1" value="20"
+               oninput="sv('T-v',this.value);schedule()">
+      </div>
+
+      <div class="ctrl-section">Mechanical Analogy</div>
+      <table class="analogy-table">
+        <thead><tr><th>Electrical</th><th>Mechanical</th></tr></thead>
+        <tbody>
+          <tr><td class="hi">L (inductance)</td><td>m (mass)</td></tr>
+          <tr><td class="hi">R (resistance)</td><td>c (damping)</td></tr>
+          <tr><td class="hi">1/C</td><td>k (spring)</td></tr>
+          <tr><td class="hi">V₀ (voltage)</td><td>F (force)</td></tr>
+          <tr><td class="hi">q (charge)</td><td>y (displacement)</td></tr>
+          <tr><td class="hi">i = q′ (current)</td><td>v = y′ (velocity)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="plot-panel">
+
+      <!-- Circuit diagram -->
+      <div class="plot-box" style="padding:1.25rem;">
+        <svg class="circuit-svg" viewBox="0 0 420 160" width="100%" height="120"
+             style="font-family:system-ui,-apple-system,sans-serif;">
+          <!-- Wire top -->
+          <line x1="30" y1="40" x2="100" y2="40" stroke="#89A4BC" stroke-width="2"/>
+          <!-- R -->
+          <rect x="100" y="28" width="60" height="24" rx="4"
+                fill="rgba(74,143,212,0.15)" stroke="#4A8FD4" stroke-width="1.5"/>
+          <text x="130" y="44" text-anchor="middle" fill="#4A8FD4" font-size="13" font-weight="bold">R</text>
+          <!-- wire -->
+          <line x1="160" y1="40" x2="200" y2="40" stroke="#89A4BC" stroke-width="2"/>
+          <!-- L -->
+          <path d="M200,40 q8,-18,16,0 q8,-18,16,0 q8,-18,16,0" fill="none"
+                stroke="#27A96C" stroke-width="2"/>
+          <text x="224" y="76" text-anchor="middle" fill="#27A96C" font-size="13" font-weight="bold">L</text>
+          <!-- wire -->
+          <line x1="248" y1="40" x2="300" y2="40" stroke="#89A4BC" stroke-width="2"/>
+          <!-- wire down right -->
+          <line x1="300" y1="40" x2="300" y2="55" stroke="#89A4BC" stroke-width="2"/>
+          <!-- C plates -->
+          <line x1="280" y1="55" x2="320" y2="55" stroke="#E87040" stroke-width="2.5"/>
+          <line x1="280" y1="68" x2="320" y2="68" stroke="#E87040" stroke-width="2.5"/>
+          <text x="335" y="64" fill="#E87040" font-size="13" font-weight="bold">C</text>
+          <!-- wire down right -->
+          <line x1="300" y1="68" x2="300" y2="120" stroke="#89A4BC" stroke-width="2"/>
+          <!-- wire bottom -->
+          <line x1="30" y1="120" x2="300" y2="120" stroke="#89A4BC" stroke-width="2"/>
+          <!-- V source -->
+          <line x1="30" y1="40" x2="30" y2="68" stroke="#89A4BC" stroke-width="2"/>
+          <circle cx="30" cy="80" r="14" fill="rgba(16,32,56,0.8)" stroke="#D2E0EE" stroke-width="1.5"/>
+          <text x="30" y="85" text-anchor="middle" fill="#D2E0EE" font-size="12" font-weight="bold">V₀</text>
+          <line x1="30" y1="94" x2="30" y2="120" stroke="#89A4BC" stroke-width="2"/>
+          <!-- labels -->
+          <text x="130" y="18" text-anchor="middle" fill="#5E7A96" font-size="11">Resistor</text>
+          <text x="224" y="18" text-anchor="middle" fill="#5E7A96" font-size="11">Inductor</text>
+          <text x="336" y="50" fill="#5E7A96" font-size="11">Cap.</text>
+          <!-- current arrow -->
+          <path d="M370,40 L390,40" stroke="#D2E0EE" stroke-width="1.5" marker-end="url(#arr)"/>
+          <defs><marker id="arr" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#D2E0EE"/>
+          </marker></defs>
+          <text x="380" y="30" text-anchor="middle" fill="#D2E0EE" font-size="11">i(t)</text>
+        </svg>
+      </div>
+
+      <div class="plot-box"><div id="vc-plot" style="height:220px;"></div></div>
+      <div class="plot-box"><div id="i-plot"  style="height:200px;"></div></div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Nat. Freq. ω₀</div><div class="metric-value" id="m-w0">—</div></div>
+        <div class="metric"><div class="metric-label">Q Factor</div><div class="metric-value" id="m-Q">—</div></div>
+        <div class="metric"><div class="metric-label">Damping Ratio ζ</div><div class="metric-value" id="m-z">—</div></div>
+        <div class="metric"><div class="metric-label">Behavior</div><div class="metric-value plain" id="m-type">—</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function rk4(ode,y0,T,n){
+  const dt=T/n,t=[0],Y=[y0.slice()];
+  for(let i=0;i<n;i++){
+    const ti=t[i],yi=Y[i];
+    const k1=ode(ti,yi);
+    const k2=ode(ti+dt/2,yi.map((v,j)=>v+dt/2*k1[j]));
+    const k3=ode(ti+dt/2,yi.map((v,j)=>v+dt/2*k2[j]));
+    const k4=ode(ti+dt,yi.map((v,j)=>v+dt*k3[j]));
+    Y.push(yi.map((v,j)=>v+dt/6*(k1[j]+2*k2[j]+2*k3[j]+k4[j])));
+    t.push(ti+dt);
+  }
+  return {t,Y};
+}
+
+const CFG={displayModeBar:false,responsive:true};
+const BASE={paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+            font:{color:'#D2E0EE',family:'system-ui,-apple-system,sans-serif'},
+            margin:{l:52,r:16,t:30,b:40},showlegend:false};
+const AX={gridcolor:'#1A304D',zerolinecolor:'#2A4060',zerolinewidth:1.5};
+
+function sv(id,v){document.getElementById(id).textContent=parseFloat(v).toFixed(2);}
+function g(id){return parseFloat(document.getElementById(id).value);}
+
+function build(){
+  const R=g('R-s'),L=g('L-s'),C=g('C-s'),V0=g('V-s'),T=g('T-s');
+
+  // State: [q, i]  q'=i,  i'=(V0 - R*i - q/C)/L
+  const {t,Y}=rk4(
+    (_,yi)=>[yi[1], (V0-R*yi[1]-yi[0]/C)/L],
+    [0,0], T, Math.ceil(T*200)
+  );
+  const vc=Y.map(yi=>yi[0]/C);    // capacitor voltage = q/C
+  const curr=Y.map(yi=>yi[1]);    // current i
+
+  const w0=1/Math.sqrt(L*C);
+  const zeta=R/(2*Math.sqrt(L/C));
+  const Q=Math.sqrt(L/C)/R || Infinity;
+  const stype=zeta<1-1e-9?'Underdamped':zeta>1+1e-9?'Overdamped':'Critically Damped';
+
+  document.getElementById('m-w0').textContent=w0.toFixed(3)+' rad/s';
+  document.getElementById('m-Q').textContent=isFinite(Q)?Q.toFixed(3):'∞';
+  document.getElementById('m-z').textContent=zeta.toFixed(3);
+  document.getElementById('m-type').textContent=stype;
+
+  // v_C steady state line at V0
+  Plotly.react('vc-plot',[
+    {x:t,y:vc,mode:'lines',line:{color:'#E87040',width:2},name:'v_C(t)'},
+  ],{...BASE,
+    title:{text:'Capacitor Voltage v_C(t)',font:{size:13}},
+    xaxis:{title:'t (s)',...AX},
+    yaxis:{title:'v_C (V)',...AX},
+    shapes:[{type:'line',x0:0,x1:T,y0:V0,y1:V0,
+             line:{color:'#5E7A96',width:1.2,dash:'dot'}}],
+    annotations:[{x:T*0.95,y:V0,text:`V₀ = ${V0}V`,showarrow:false,
+                  yanchor:'bottom',font:{color:'#5E7A96',size:11}}],
+  },CFG);
+
+  Plotly.react('i-plot',[
+    {x:t,y:curr,mode:'lines',line:{color:'#4A8FD4',width:2},name:'i(t)'},
+  ],{...BASE,
+    title:{text:'Current i(t)',font:{size:13}},
+    xaxis:{title:'t (s)',...AX},
+    yaxis:{title:'i (A)',...AX},
+    shapes:[{type:'line',x0:0,x1:T,y0:0,y1:0,
+             line:{color:'#5E7A96',width:1,dash:'dot'}}],
+  },CFG);
+}
+
+let _t;
+function schedule(){clearTimeout(_t);_t=setTimeout(build,100);}
+build();
+</script>
+</body>
+</html>

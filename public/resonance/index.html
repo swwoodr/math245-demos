@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forced Oscillations &amp; Resonance</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Forced Oscillations &amp; Resonance</h1>
+  <p class="demo-eq">$m\,y'' + c\,y' + k\,y = F\cos(\omega t)$</p>
+
+  <div class="demo-layout">
+    <div class="controls">
+
+      <div class="ctrl-section">System</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Mass m (kg) <span class="ctrl-val" id="m-v">1.0</span></div>
+        <input type="range" id="m-s" min="0.5" max="5" step="0.1" value="1.0"
+               oninput="sv('m-v',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Damping c <span class="ctrl-val" id="c-v">0.3</span></div>
+        <input type="range" id="c-s" min="0" max="4" step="0.05" value="0.3"
+               oninput="sv('c-v',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Spring k (N/m) <span class="ctrl-val" id="k-v">4.0</span></div>
+        <input type="range" id="k-s" min="0.5" max="20" step="0.5" value="4.0"
+               oninput="sv('k-v',this.value);schedule()">
+      </div>
+
+      <div class="ctrl-section">Forcing</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Amplitude F <span class="ctrl-val" id="F-v">1.0</span></div>
+        <input type="range" id="F-s" min="0.1" max="5" step="0.1" value="1.0"
+               oninput="sv('F-v',this.value);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Frequency ω (rad/s) <span class="ctrl-val" id="w-v">1.00</span></div>
+        <input type="range" id="w-s" min="0.1" max="6" step="0.05" value="1.0"
+               oninput="document.getElementById('w-v').textContent=parseFloat(this.value).toFixed(2);schedule()">
+      </div>
+
+      <div class="ctrl-section">Time</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Span T (s) <span class="ctrl-val" id="T-v">40</span></div>
+        <input type="range" id="T-s" min="10" max="80" step="5" value="40"
+               oninput="sv('T-v',this.value);schedule()">
+      </div>
+
+      <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
+        <div id="eq-box" style="text-align:center; min-height:2.5rem;"></div>
+      </div>
+
+    </div>
+
+    <div class="plot-panel">
+      <div class="plot-box"><div id="resp-plot" style="height:280px;"></div></div>
+      <div class="plot-box"><div id="gain-plot" style="height:240px;"></div></div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Nat. Freq. ωₙ</div><div class="metric-value" id="m-wn">—</div></div>
+        <div class="metric"><div class="metric-label">Damping Ratio ζ</div><div class="metric-value" id="m-z">—</div></div>
+        <div class="metric"><div class="metric-label">Resonant ω*</div><div class="metric-value" id="m-wr">—</div></div>
+        <div class="metric"><div class="metric-label">Steady-State Amp</div><div class="metric-value" id="m-amp">—</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function rk4(ode, y0, T, n) {
+  const dt=T/n, t=[0], Y=[y0.slice()];
+  for(let i=0;i<n;i++){
+    const ti=t[i],yi=Y[i];
+    const k1=ode(ti,yi);
+    const k2=ode(ti+dt/2,yi.map((v,j)=>v+dt/2*k1[j]));
+    const k3=ode(ti+dt/2,yi.map((v,j)=>v+dt/2*k2[j]));
+    const k4=ode(ti+dt,yi.map((v,j)=>v+dt*k3[j]));
+    Y.push(yi.map((v,j)=>v+dt/6*(k1[j]+2*k2[j]+2*k3[j]+k4[j])));
+    t.push(ti+dt);
+  }
+  return {t,Y};
+}
+
+const CFG={displayModeBar:false,responsive:true};
+const BASE={paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+            font:{color:'#D2E0EE',family:'system-ui,-apple-system,sans-serif'},
+            margin:{l:50,r:16,t:30,b:44}};
+const AX={gridcolor:'#1A304D',zerolinecolor:'#2A4060',zerolinewidth:1.5};
+
+function sv(id,v){document.getElementById(id).textContent=parseFloat(v).toFixed(1);}
+function g(id){return parseFloat(document.getElementById(id).value);}
+
+function build() {
+  const m=g('m-s'),c=g('c-s'),k=g('k-s'),F=g('F-s'),w=g('w-s'),T=g('T-s');
+
+  // Solve IVP
+  const {t,Y}=rk4(
+    (ti,yi)=>[yi[1], (F*Math.cos(w*ti)-c*yi[1]-k*yi[0])/m],
+    [0,0], T, Math.ceil(T*200)
+  );
+  const y=Y.map(yi=>yi[0]);
+
+  // System quantities
+  const wn=Math.sqrt(k/m);
+  const zeta=c/(2*Math.sqrt(m*k));
+  const wr=zeta<1/Math.sqrt(2) ? wn*Math.sqrt(1-2*zeta*zeta) : null;
+  const amp=F/Math.sqrt((k-m*w*w)**2+(c*w)**2);
+
+  document.getElementById('m-wn').textContent=wn.toFixed(3)+' rad/s';
+  document.getElementById('m-z').textContent=zeta.toFixed(3);
+  document.getElementById('m-wr').textContent=wr ? wr.toFixed(3)+' rad/s' : 'N/A';
+  document.getElementById('m-amp').textContent=amp.toFixed(4);
+
+  // Equation rendering
+  document.getElementById('eq-box').innerHTML=katex.renderToString(
+    `\\omega_n=${wn.toFixed(3)},\\quad \\zeta=${zeta.toFixed(3)}`,
+    {throwOnError:false,displayMode:true});
+
+  // Response plot
+  Plotly.react('resp-plot',[
+    {x:t,y:y,mode:'lines',line:{color:'#4A8FD4',width:1.8},name:'y(t)'},
+  ],{...BASE,
+    title:{text:'Response y(t)',font:{size:13}},
+    xaxis:{title:'t (s)',...AX},yaxis:{title:'y (m)',...AX},
+    showlegend:false,
+  },CFG);
+
+  // Gain curve
+  const wArr=Array.from({length:400},(_,i)=>0.05+i*(Math.max(wn*3,6)-0.05)/399);
+  const gain=wArr.map(wi=>F/Math.sqrt((k-m*wi*wi)**2+(c*wi)**2));
+
+  const gainTraces=[
+    {x:wArr,y:gain,mode:'lines',line:{color:'#27A96C',width:2},name:'G(ω)'},
+    // Current ω marker
+    {x:[w],y:[amp],mode:'markers',
+     marker:{color:'#E04040',size:12,symbol:'diamond',line:{color:'white',width:1.5}},
+     name:'current ω'},
+  ];
+  const gainShapes=[
+    {type:'line',x0:wn,x1:wn,y0:0,y1:Math.max(...gain)*1.05,
+     line:{color:'#4A8FD4',width:1.5,dash:'dot'}},
+  ];
+  if(wr){
+    gainShapes.push({type:'line',x0:wr,x1:wr,y0:0,y1:Math.max(...gain)*1.05,
+     line:{color:'#D44848',width:1.5,dash:'dot'}});
+  }
+
+  Plotly.react('gain-plot',gainTraces,{
+    ...BASE,
+    title:{text:'Steady-State Amplitude G(ω) — drag ω slider to sweep',font:{size:13}},
+    xaxis:{title:'ω (rad/s)',...AX},
+    yaxis:{title:'Amplitude',...AX},
+    showlegend:true,
+    legend:{x:0.99,xanchor:'right',y:0.99,bgcolor:'rgba(12,26,48,0.8)',
+            bordercolor:'#1A304D',borderwidth:1,font:{size:11}},
+    shapes:gainShapes,
+    annotations:[
+      {x:wn,y:0,text:'ωₙ',showarrow:false,yanchor:'bottom',
+       font:{color:'#4A8FD4',size:11}},
+      ...(wr?[{x:wr,y:0,text:'ω*',showarrow:false,yanchor:'bottom',
+               font:{color:'#D44848',size:11}}]:[]),
+    ],
+  },CFG);
+}
+
+let _t;
+function schedule(){clearTimeout(_t);_t=setTimeout(build,100);}
+build();
+</script>
+</body>
+</html>
