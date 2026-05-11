@@ -49,10 +49,17 @@
       </div>
 
       <div class="ctrl-section">Subintervals</div>
+      <div class="ctrl-row" style="align-items:center; gap:0.5rem;">
+        <div class="ctrl-label" style="flex:0 0 auto;">n</div>
+        <input type="number" id="n-in" value="10" min="1" max="10000" step="1"
+               style="width:4.5rem; padding:0.25rem 0.4rem; background:var(--card-alt);
+                      border:1px solid var(--border); border-radius:6px;
+                      color:var(--text); font-size:0.875rem; text-align:right;"
+               oninput="syncN('in'); schedule()">
+      </div>
       <div class="ctrl-row">
-        <div class="ctrl-label">n <span class="ctrl-val" id="n-val">10</span></div>
-        <input type="range" id="n-sl" min="1" max="150" value="10"
-               oninput="document.getElementById('n-val').textContent=this.value; schedule()">
+        <input type="range" id="n-sl" min="1" max="200" value="10"
+               oninput="syncN('sl'); schedule()">
       </div>
       <div id="n-note" style="font-size:0.72rem;color:var(--muted);margin-top:0.2rem;display:none;">
         Simpson's requires even n — using <strong id="n-eff-display"></strong>
@@ -330,7 +337,7 @@ function update() {
   const f      = fn.f;
   const a      = parseFloat(document.getElementById('a-in').value);
   const b      = parseFloat(document.getElementById('b-in').value);
-  const nRaw   = parseInt(document.getElementById('n-sl').value);
+  const nRaw   = Math.max(1, parseInt(document.getElementById('n-in').value) || 1);
   const method = document.querySelector('input[name="method"]:checked').value;
 
   if (!isFinite(a) || !isFinite(b) || a >= b) return;
@@ -418,7 +425,7 @@ function drawConvergence(f, a, b) {
     ...PLOT_LAYOUT,
     margin: {l:50, r:16, t:10, b:44},
     xaxis: {...PLOT_LAYOUT.xaxis, title:'n (subintervals)', type:'log'},
-    yaxis: {...PLOT_LAYOUT.yaxis, title:'|Error|',          type:'log'},
+    yaxis: {...PLOT_LAYOUT.yaxis, title:'|Error|', type:'log', exponentformat:'power'},
     legend: {...PLOT_LAYOUT.legend, x:0.99, xanchor:'right'},
   }, CFG);
 }
@@ -447,6 +454,19 @@ function toggleExpander(head) {
       drawConvergence(fn.f, a, b);
       convPlotReady = true;
     }
+  }
+}
+
+// ── Sync slider ↔ number input ───────────────────────────────────────────────
+function syncN(source) {
+  const sl = document.getElementById('n-sl');
+  const ni = document.getElementById('n-in');
+  if (source === 'sl') {
+    ni.value = sl.value;
+  } else {
+    const v = Math.max(1, Math.min(parseInt(ni.value) || 1, 10000));
+    ni.value = v;
+    sl.value = Math.min(v, parseInt(sl.max));   // clamp to slider range
   }
 }
 

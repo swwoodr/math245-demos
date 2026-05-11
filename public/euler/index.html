@@ -3,32 +3,47 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Euler's Method</title>
+  <title>Numerical ODE Methods</title>
   <link rel="stylesheet" href="../style.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
           onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .method-table { width:100%; border-collapse:collapse; font-size:0.8125rem; }
+    .method-table th {
+      background:var(--card-alt); color:var(--muted); font-weight:600;
+      text-transform:uppercase; letter-spacing:0.06em; font-size:0.7rem;
+      padding:0.45rem 0.65rem; border-bottom:1px solid var(--border); text-align:right;
+    }
+    .method-table th:first-child { text-align:left; }
+    .method-table td { padding:0.38rem 0.65rem; border-bottom:1px solid var(--border); text-align:right; font-family:monospace; font-size:0.8rem; }
+    .method-table td.lbl { text-align:left; font-family:inherit; font-weight:500; font-size:0.8125rem; }
+    .method-table tr:last-child td { border-bottom:none; }
+    .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  </style>
 </head>
 <body>
 <div class="demo-wrap">
   <a class="back-link" href="/">← All Demos</a>
-  <h1>Euler's Method</h1>
-  <p class="demo-eq">$y_{n+1} = y_n + h\,f(x_n,\,y_n)$</p>
+  <h1>Numerical ODE Methods</h1>
+  <p class="demo-eq">$y' = f(x,\,y), \quad y(x_0) = y_0$</p>
 
   <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
     <div class="controls">
 
       <div class="ctrl-section">Equation  y′ = f(x, y)</div>
       <div class="ctrl-row">
         <select id="ode-sel" onchange="onOdeChange()">
-          <option value="y">y  &nbsp; (exponential growth)</option>
-          <option value="neg-y">−y  &nbsp; (exponential decay)</option>
+          <option value="y">y  &nbsp;(exponential growth)</option>
+          <option value="neg-y">−y  &nbsp;(exponential decay)</option>
           <option value="x-y">x − y</option>
           <option value="sinx">sin(x)</option>
-          <option value="logistic">y(1 − y)  &nbsp; (logistic)</option>
-          <option value="x2">x²  &nbsp; (polynomial)</option>
+          <option value="logistic">y(1 − y)  &nbsp;(logistic)</option>
+          <option value="x2">x²  &nbsp;(polynomial)</option>
         </select>
       </div>
 
@@ -36,65 +51,135 @@
       <div class="ctrl-row">
         <div class="ctrl-label">x₀ <span class="ctrl-val" id="x0-v">0.0</span></div>
         <input type="range" id="x0-s" min="-2" max="2" step="0.1" value="0"
-               oninput="sv('x0-v',this.value);schedule()">
+               oninput="sv('x0-v',this.value); schedule()">
       </div>
       <div class="ctrl-row">
         <div class="ctrl-label">y₀ <span class="ctrl-val" id="y0-v">1.0</span></div>
         <input type="range" id="y0-s" min="-3" max="3" step="0.1" value="1.0"
-               oninput="sv('y0-v',this.value);schedule()">
+               oninput="sv('y0-v',this.value); schedule()">
       </div>
 
-      <div class="ctrl-section">Euler Parameters</div>
+      <div class="ctrl-section">Step Parameters</div>
       <div class="ctrl-row">
         <div class="ctrl-label">Step size h <span class="ctrl-val" id="h-v">0.50</span></div>
         <input type="range" id="h-s" min="0.05" max="2" step="0.05" value="0.5"
-               oninput="document.getElementById('h-v').textContent=parseFloat(this.value).toFixed(2);schedule()">
+               oninput="document.getElementById('h-v').textContent=parseFloat(this.value).toFixed(2); schedule()">
       </div>
       <div class="ctrl-row">
         <div class="ctrl-label">Steps n <span class="ctrl-val" id="n-v">8</span></div>
         <input type="range" id="n-s" min="1" max="30" step="1" value="8"
-               oninput="sv('n-v',this.value);schedule()">
+               oninput="sv('n-v',this.value); schedule()">
       </div>
 
-      <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border);">
-        <div id="formula-box" style="text-align:center;min-height:3rem;font-size:0.85rem;color:var(--muted);">
-        </div>
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-tangents" checked onchange="build()">
+          Show Euler tangent lines
+        </label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-predictors" onchange="build()">
+          Show Imp. Euler predictor steps
+        </label>
+      </div>
+
+      <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
+        <div id="formula-box" style="text-align:center; min-height:2.5rem; font-size:0.85rem; color:var(--muted);"></div>
       </div>
 
     </div>
 
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
     <div class="plot-panel">
-      <div class="plot-box"><div id="main-plot" style="height:420px;"></div></div>
 
-      <div class="metrics-row cols-3">
-        <div class="metric"><div class="metric-label">Final Euler y</div><div class="metric-value" id="m-yE">—</div></div>
-        <div class="metric"><div class="metric-label">Final Exact y</div><div class="metric-value plain" id="m-yT">—</div></div>
-        <div class="metric"><div class="metric-label">Final |Error|</div><div class="metric-value" id="m-err">—</div></div>
+      <div class="plot-box">
+        <div id="main-plot" style="height:400px;"></div>
       </div>
 
-      <!-- Step table -->
+      <!-- Method comparison table -->
+      <div class="plot-box" style="padding:0.75rem 1rem 0.5rem;">
+        <table class="method-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>Order</th>
+              <th>Final y</th>
+              <th>|Error|</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="lbl"><span class="dot" style="background:#4A8FD4;"></span>Euler</td>
+              <td style="color:var(--muted)">O(h)</td>
+              <td id="m-yE">—</td>
+              <td id="m-errE" style="color:#D44848;">—</td>
+            </tr>
+            <tr>
+              <td class="lbl"><span class="dot" style="background:#E87040;"></span>Improved Euler</td>
+              <td style="color:var(--muted)">O(h²)</td>
+              <td id="m-yIE">—</td>
+              <td id="m-errIE" style="color:#D44848;">—</td>
+            </tr>
+            <tr>
+              <td class="lbl"><span class="dot" style="background:#A056E0;"></span>RK4</td>
+              <td style="color:var(--muted)">O(h⁴)</td>
+              <td id="m-yRK">—</td>
+              <td id="m-errRK" style="color:#D44848;">—</td>
+            </tr>
+            <tr>
+              <td class="lbl" colspan="2" style="color:var(--muted); font-size:0.75rem;">
+                <span class="dot" style="background:#27A96C;"></span>Exact  at xₙ
+              </td>
+              <td id="m-yT" colspan="2" style="color:#27A96C; text-align:right;">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Step-by-step table -->
       <div class="expander">
         <div class="expander-head" onclick="toggleExp(this)">
           <span>📋 Step-by-step table</span>
           <span class="expander-arrow">▼</span>
         </div>
-        <div class="expander-body hidden" id="step-table-wrap">
+        <div class="expander-body hidden">
           <div style="overflow-x:auto;">
-            <table id="step-table" style="width:100%;border-collapse:collapse;font-size:0.8125rem;">
-              <thead>
-                <tr style="background:var(--card-alt);">
-                  <th style="padding:0.5rem;border-bottom:1px solid var(--border);text-align:right;color:var(--muted);">n</th>
-                  <th style="padding:0.5rem;border-bottom:1px solid var(--border);text-align:right;color:var(--muted);">xₙ</th>
-                  <th style="padding:0.5rem;border-bottom:1px solid var(--border);text-align:right;color:var(--muted);">yₙ (Euler)</th>
-                  <th style="padding:0.5rem;border-bottom:1px solid var(--border);text-align:right;color:var(--muted);">y (Exact)</th>
-                  <th style="padding:0.5rem;border-bottom:1px solid var(--border);text-align:right;color:var(--muted);">|Error|</th>
-                </tr>
-              </thead>
+            <table style="width:100%; border-collapse:collapse; font-size:0.775rem; white-space:nowrap;">
+              <thead id="step-thead"></thead>
               <tbody id="step-tbody"></tbody>
             </table>
           </div>
         </div>
       </div>
+
+      <!-- Error convergence plot -->
+      <div class="expander">
+        <div class="expander-head" onclick="toggleConv(this)">
+          <span>📉 Error vs step size h (all three methods)</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p style="font-size:0.8125rem; color:var(--muted); margin:0 0 0.5rem;">
+            Fixed endpoint x<sub>n</sub> = x₀ + n·h. Step size refined by increasing n.<br>
+            Slopes confirm the order of each method on the log-log plot.
+          </p>
+          <div id="conv-plot" style="height:280px;"></div>
+        </div>
+      </div>
+
+      <!-- Formula reference -->
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 Method formulas</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <div id="formula-ref" style="font-size:0.85rem; line-height:2.2;"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -102,142 +187,290 @@
 <script>
 // ── ODE library ───────────────────────────────────────────────────────────────
 const ODES = {
-  'y':       { f:(x,y)=>y,          latex:"y' = y",          exact:(x,x0,y0)=>y0*Math.exp(x-x0) },
-  'neg-y':   { f:(x,y)=>-y,         latex:"y' = -y",         exact:(x,x0,y0)=>y0*Math.exp(-(x-x0)) },
-  'x-y':     { f:(x,y)=>x-y,        latex:"y' = x - y",      exact:(x,x0,y0)=>(y0-x0+1)*Math.exp(-(x-x0))+x-1 },
-  'sinx':    { f:(x,_)=>Math.sin(x), latex:"y' = \\sin x",    exact:(x,x0,y0)=>y0-Math.cos(x)+Math.cos(x0) },
-  'logistic':{ f:(x,y)=>y*(1-y),    latex:"y' = y(1-y)",     exact:(x,x0,y0)=>{const e=Math.exp(-(x-x0));return y0/(y0+(1-y0)*e);} },
-  'x2':      { f:(x,_)=>x*x,        latex:"y' = x^2",        exact:(x,x0,y0)=>y0+(x**3-x0**3)/3 },
+  'y':       { f:(x,y)=>y,           latex:"y' = y",         exact:(x,x0,y0)=>y0*Math.exp(x-x0) },
+  'neg-y':   { f:(x,y)=>-y,          latex:"y' = -y",        exact:(x,x0,y0)=>y0*Math.exp(-(x-x0)) },
+  'x-y':     { f:(x,y)=>x-y,         latex:"y' = x-y",       exact:(x,x0,y0)=>(y0-x0+1)*Math.exp(-(x-x0))+x-1 },
+  'sinx':    { f:(x,_)=>Math.sin(x),  latex:"y' = \\sin x",   exact:(x,x0,y0)=>y0-Math.cos(x)+Math.cos(x0) },
+  'logistic':{ f:(x,y)=>y*(1-y),     latex:"y' = y(1-y)",    exact:(x,x0,y0)=>{ const e=Math.exp(-(x-x0)); return y0/(y0+(1-y0)*e); } },
+  'x2':      { f:(x,_)=>x*x,         latex:"y' = x^2",       exact:(x,x0,y0)=>y0+(x**3-x0**3)/3 },
 };
 
-// ── Fine RK4 for "exact" fallback ─────────────────────────────────────────────
-function exactFine(f,x0,y0,xEnd,N=2000){
-  const dt=(xEnd-x0)/N; let x=x0, y=y0;
-  for(let i=0;i<N;i++){
-    const k1=f(x,y), k2=f(x+dt/2,y+dt/2*k1), k3=f(x+dt/2,y+dt/2*k2), k4=f(x+dt,y+dt*k3);
-    y+=dt/6*(k1+2*k2+2*k3+k4); x+=dt;
+// ── High-accuracy RK4 reference ───────────────────────────────────────────────
+function exactFine(f, x0, y0, xEnd, N=2000) {
+  const dt = (xEnd-x0)/N; let x=x0, y=y0;
+  for (let i=0; i<N; i++) {
+    const k1=f(x,y), k2=f(x+dt/2,y+dt/2*k1),
+          k3=f(x+dt/2,y+dt/2*k2), k4=f(x+dt,y+dt*k3);
+    y += dt/6*(k1+2*k2+2*k3+k4); x += dt;
   }
   return y;
 }
-
-function exactArr(ode,x0,y0,xArr){
-  if(ode.exact) return xArr.map(x=>ode.exact(x,x0,y0));
-  // fallback: integrate step by step
+function exactAt(ode, x0, y0, x) {
+  return ode.exact ? ode.exact(x,x0,y0) : exactFine(ode.f,x0,y0,x);
+}
+function exactArr(ode, x0, y0, xs) {
+  if (ode.exact) return xs.map(x => ode.exact(x,x0,y0));
   const res=[y0]; let prev=y0;
-  for(let i=1;i<xArr.length;i++){
-    res.push(exactFine(ode.f,xArr[i-1],prev,xArr[i]));
-    prev=res[i];
-  }
+  for (let i=1; i<xs.length; i++) { res.push(exactFine(ode.f,xs[i-1],prev,xs[i])); prev=res[i]; }
   return res;
 }
 
-const CFG={displayModeBar:false,responsive:true};
-const BASE={paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
-            font:{color:'#D2E0EE',family:'system-ui,-apple-system,sans-serif'},
-            margin:{l:50,r:16,t:20,b:44}};
-const AX={gridcolor:'#1A304D',zerolinecolor:'#2A4060',zerolinewidth:1.5};
-
-function sv(id,v){document.getElementById(id).textContent=parseFloat(v).toFixed(1);}
-function g(id){return parseFloat(document.getElementById(id).value);}
-
-function build(){
-  const key=document.getElementById('ode-sel').value;
-  const ode=ODES[key];
-  const x0=g('x0-s'), y0=g('y0-s'), h=g('h-s'), n=parseInt(g('n-s'));
-
-  // Euler steps
-  const xE=[x0], yE=[y0];
-  for(let i=0;i<n;i++){
-    xE.push(xE[i]+h);
-    yE.push(yE[i]+h*ode.f(xE[i],yE[i]));
+// ── Step methods ──────────────────────────────────────────────────────────────
+function eulerSteps(f, x0, y0, h, n) {
+  const xs=[x0], ys=[y0];
+  for (let i=0; i<n; i++) {
+    xs.push(xs[i]+h);
+    ys.push(ys[i] + h*f(xs[i], ys[i]));
   }
-
-  const xEnd=xE[xE.length-1];
-
-  // Exact solution on a fine grid
-  const xFine=Array.from({length:300},(_,i)=>x0+i*(xEnd-x0)/299);
-  const yExact=exactArr(ode,x0,y0,xFine);
-
-  // Exact at Euler x-points for error
-  const yExactAtE=exactArr(ode,x0,y0,xE);
-
-  // Slope (tangent line) segments at each Euler point
-  const slopeXs=[], slopeYs=[];
-  for(let i=0;i<n;i++){
-    const slope=ode.f(xE[i],yE[i]);
-    const dx=h*0.45;
-    slopeXs.push(xE[i]-dx, xE[i]+dx, null);
-    slopeYs.push(yE[i]-slope*dx, yE[i]+slope*dx, null);
-  }
-
-  // Error bars (vertical lines from Euler to exact)
-  const errXs=[], errYs=[];
-  for(let i=1;i<=n;i++){
-    errXs.push(xE[i],xE[i],null);
-    errYs.push(yE[i],yExactAtE[i],null);
-  }
-
-  const traces=[
-    // Exact solution
-    {x:xFine,y:yExact,mode:'lines',line:{color:'#27A96C',width:2.5},name:'Exact'},
-    // Error verticals
-    {x:errXs,y:errYs,mode:'lines',line:{color:'#D44848',width:1.2,dash:'dot'},
-     name:'Error',showlegend:true},
-    // Slope lines at each Euler point
-    {x:slopeXs,y:slopeYs,mode:'lines',line:{color:'#E8C040',width:1.2},
-     name:'Tangent lines',showlegend:true},
-    // Euler path
-    {x:xE,y:yE,mode:'lines+markers',line:{color:'#4A8FD4',width:2,dash:'dash'},
-     marker:{color:'#4A8FD4',size:8,line:{color:'white',width:1}},name:"Euler's method"},
-    // Initial condition
-    {x:[x0],y:[y0],mode:'markers',
-     marker:{color:'#E87040',size:12,symbol:'star',line:{color:'white',width:1.5}},
-     name:'(x₀, y₀)'},
-  ];
-
-  Plotly.react('main-plot',traces,{
-    ...BASE,showlegend:true,
-    legend:{x:0.01,y:0.99,bgcolor:'rgba(12,26,48,0.8)',bordercolor:'#1A304D',borderwidth:1,font:{size:11}},
-    xaxis:{title:'x',...AX},yaxis:{title:'y',...AX},
-  },CFG);
-
-  // Metrics
-  const yEfinal=yE[n], yTfinal=yExactAtE[n];
-  document.getElementById('m-yE').textContent=yEfinal.toFixed(5);
-  document.getElementById('m-yT').textContent=yTfinal.toFixed(5);
-  document.getElementById('m-err').textContent=Math.abs(yEfinal-yTfinal).toExponential(2)
-    .replace('e+','e').replace('e-0','e−').replace('e-','e−');
-
-  // Formula
-  document.getElementById('formula-box').innerHTML=katex.renderToString(
-    ode.latex,{throwOnError:false,displayMode:true});
-
-  // Step table
-  const tbody=document.getElementById('step-tbody');
-  tbody.innerHTML='';
-  for(let i=0;i<=n;i++){
-    const err=Math.abs(yE[i]-yExactAtE[i]);
-    const row=document.createElement('tr');
-    row.innerHTML=`
-      <td style="padding:0.375rem 0.5rem;border-bottom:1px solid var(--border);text-align:right;color:var(--muted);">${i}</td>
-      <td style="padding:0.375rem 0.5rem;border-bottom:1px solid var(--border);text-align:right;">${xE[i].toFixed(3)}</td>
-      <td style="padding:0.375rem 0.5rem;border-bottom:1px solid var(--border);text-align:right;color:var(--primary);font-family:monospace;">${yE[i].toFixed(5)}</td>
-      <td style="padding:0.375rem 0.5rem;border-bottom:1px solid var(--border);text-align:right;color:#27A96C;font-family:monospace;">${yExactAtE[i].toFixed(5)}</td>
-      <td style="padding:0.375rem 0.5rem;border-bottom:1px solid var(--border);text-align:right;color:#D44848;font-family:monospace;">${err<1e-14?'< 1e−14':err.toExponential(2)}</td>`;
-    tbody.appendChild(row);
-  }
+  return {xs, ys};
 }
 
-function onOdeChange(){ build(); }
+// Improved Euler (Heun's Method): predictor-corrector RK2
+function heunSteps(f, x0, y0, h, n) {
+  const xs=[x0], ys=[y0], k1s=[], k2s=[];
+  for (let i=0; i<n; i++) {
+    const xi=xs[i], yi=ys[i];
+    const k1 = f(xi,      yi);
+    const k2 = f(xi+h,    yi + h*k1);   // predictor at xi+h
+    k1s.push(k1); k2s.push(k2);
+    xs.push(xi+h);
+    ys.push(yi + h/2*(k1+k2));           // corrected step
+  }
+  return {xs, ys, k1s, k2s};
+}
 
-function toggleExp(head){
+// Runge-Kutta 4th order
+function rk4Steps(f, x0, y0, h, n) {
+  const xs=[x0], ys=[y0];
+  for (let i=0; i<n; i++) {
+    const xi=xs[i], yi=ys[i];
+    const k1 = f(xi,       yi);
+    const k2 = f(xi+h/2,   yi + h/2*k1);
+    const k3 = f(xi+h/2,   yi + h/2*k2);
+    const k4 = f(xi+h,     yi + h*k3);
+    xs.push(xi+h);
+    ys.push(yi + h/6*(k1 + 2*k2 + 2*k3 + k4));
+  }
+  return {xs, ys};
+}
+
+// ── Plotly config ─────────────────────────────────────────────────────────────
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:50, r:16, t:20, b:44}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+
+function sv(id,v)  { document.getElementById(id).textContent = parseFloat(v).toFixed(1); }
+function g(id)     { return parseFloat(document.getElementById(id).value); }
+function fmtE(v)   {
+  if (!isFinite(v) || v < 0) return '—';
+  if (v < 1e-13) return '< 1e−13';
+  return v.toExponential(2).replace('e+','e').replace('e-0','e−').replace('e-','e−');
+}
+
+let convPlotReady = false;
+
+// ── Main build ────────────────────────────────────────────────────────────────
+function build() {
+  const key  = document.getElementById('ode-sel').value;
+  const ode  = ODES[key];
+  const x0   = g('x0-s'), y0 = g('y0-s');
+  const h    = g('h-s'),  n  = parseInt(g('n-s'));
+  const showTan  = document.getElementById('show-tangents').checked;
+  const showPred = document.getElementById('show-predictors').checked;
+
+  // ── Compute all three methods ──
+  const {xs: xE,  ys: yE}          = eulerSteps(ode.f, x0, y0, h, n);
+  const {xs: xIE, ys: yIE, k1s, k2s} = heunSteps(ode.f, x0, y0, h, n);
+  const {xs: xRK, ys: yRK}         = rk4Steps(ode.f, x0, y0, h, n);
+
+  const xEnd   = x0 + n*h;
+  const xFine  = Array.from({length:300}, (_,i) => x0 + i*(xEnd-x0)/299);
+  const yExact = exactArr(ode, x0, y0, xFine);
+
+  // Exact at step x-points
+  const yExE  = exactArr(ode, x0, y0, xE);
+  const yExIE = exactArr(ode, x0, y0, xIE);
+  const yExRK = exactArr(ode, x0, y0, xRK);
+
+  // ── Build traces ──
+  const traces = [];
+
+  // Euler tangent lines
+  if (showTan) {
+    const tanX=[], tanY=[];
+    for (let i=0; i<n; i++) {
+      const slope = ode.f(xE[i], yE[i]);
+      const dx = h*0.44;
+      tanX.push(xE[i]-dx, xE[i]+dx, null);
+      tanY.push(yE[i]-slope*dx, yE[i]+slope*dx, null);
+    }
+    traces.push({x:tanX, y:tanY, mode:'lines',
+      line:{color:'rgba(74,143,212,0.55)',width:1.2},
+      name:'Tangent lines (Euler)', showlegend:true});
+  }
+
+  // Improved Euler predictor steps (dashed line from each node to the predictor point)
+  if (showPred) {
+    const predX=[], predY=[];
+    for (let i=0; i<n; i++) {
+      const xPred = xIE[i]+h, yPred = yIE[i] + h*k1s[i];   // Euler predictor
+      predX.push(xIE[i], xPred, null);
+      predY.push(yIE[i], yPred, null);
+    }
+    traces.push({x:predX, y:predY, mode:'lines',
+      line:{color:'rgba(232,112,64,0.55)',width:1.2,dash:'dot'},
+      name:'Predictor steps (Imp. Euler)', showlegend:true});
+  }
+
+  // Three method paths
+  traces.push(
+    {x:xE,  y:yE,  mode:'lines+markers', name:"Euler",
+     line:{color:'#4A8FD4',width:2,dash:'dash'},
+     marker:{color:'#4A8FD4',size:7,line:{color:'white',width:1}}},
+    {x:xIE, y:yIE, mode:'lines+markers', name:"Improved Euler (Heun)",
+     line:{color:'#E87040',width:2,dash:'dash'},
+     marker:{color:'#E87040',size:7,line:{color:'white',width:1}}},
+    {x:xRK, y:yRK, mode:'lines+markers', name:"RK4",
+     line:{color:'#A056E0',width:2.5},
+     marker:{color:'#A056E0',size:7,line:{color:'white',width:1}}},
+    // Exact
+    {x:xFine, y:yExact, mode:'lines', name:'Exact',
+     line:{color:'#27A96C',width:2.5}},
+    // IC star
+    {x:[x0], y:[y0], mode:'markers', name:'(x₀, y₀)',
+     marker:{color:'#E8C040',size:12,symbol:'star',line:{color:'white',width:1.5}}}
+  );
+
+  Plotly.react('main-plot', traces, {
+    ...BASE, showlegend:true,
+    legend:{x:0.01,y:0.99,bgcolor:'rgba(12,26,48,0.8)',
+            bordercolor:'#1A304D',borderwidth:1,font:{size:11}},
+    xaxis:{title:'x',...AX}, yaxis:{title:'y',...AX},
+  }, CFG);
+
+  // ── Metrics table ──
+  const yEf=yE[n], yIEf=yIE[n], yRKf=yRK[n], yTf=yExE[n];
+  document.getElementById('m-yE').textContent   = yEf.toFixed(6);
+  document.getElementById('m-yIE').textContent  = yIEf.toFixed(6);
+  document.getElementById('m-yRK').textContent  = yRKf.toFixed(6);
+  document.getElementById('m-yT').textContent   = yTf.toFixed(6);
+  document.getElementById('m-errE').textContent  = fmtE(Math.abs(yEf -yTf));
+  document.getElementById('m-errIE').textContent = fmtE(Math.abs(yIEf-yTf));
+  document.getElementById('m-errRK').textContent = fmtE(Math.abs(yRKf-yTf));
+
+  // ── ODE formula ──
+  document.getElementById('formula-box').innerHTML =
+    katex.renderToString(ode.latex, {throwOnError:false, displayMode:true});
+
+  // ── Step table ──
+  const th = document.getElementById('step-thead');
+  const tb = document.getElementById('step-tbody');
+  const TD = (txt, col) =>
+    `<td style="padding:0.33rem 0.55rem;border-bottom:1px solid var(--border);text-align:right;font-family:monospace;${col?'color:'+col+';':''}">${txt}</td>`;
+  const TH = txt =>
+    `<th style="padding:0.4rem 0.55rem;border-bottom:1px solid var(--border);text-align:right;background:var(--card-alt);color:var(--muted);white-space:nowrap;">${txt}</th>`;
+
+  th.innerHTML = `<tr>${TH('n')}${TH('xₙ')}${TH('Euler y')}${TH('|err|')}${TH('Imp. Euler y')}${TH('|err|')}${TH('RK4 y')}${TH('|err|')}${TH('Exact y')}</tr>`;
+  tb.innerHTML = '';
+  for (let i=0; i<=n; i++) {
+    const ex = yExE[i];
+    const eE = Math.abs(yE[i]-ex), eIE = Math.abs(yIE[i]-ex), eRK = Math.abs(yRK[i]-ex);
+    tb.innerHTML += `<tr>
+      ${TD(i,'var(--muted)')}
+      ${TD(xE[i].toFixed(3))}
+      ${TD(yE[i].toFixed(5),'#4A8FD4')}
+      ${TD(i===0?'0':fmtE(eE),'#D44848')}
+      ${TD(yIE[i].toFixed(5),'#E87040')}
+      ${TD(i===0?'0':fmtE(eIE),'#D44848')}
+      ${TD(yRK[i].toFixed(5),'#A056E0')}
+      ${TD(i===0?'0':fmtE(eRK),'#D44848')}
+      ${TD(ex.toFixed(5),'#27A96C')}
+    </tr>`;
+  }
+
+  // ── Convergence plot (if open) ──
+  if (convPlotReady) drawConvergence();
+
+  // ── Method formula reference ──
+  document.getElementById('formula-ref').innerHTML = [
+    katex.renderToString('\\textbf{Euler:}\\quad y_{n+1}=y_n+h\\,f(x_n,y_n)', {throwOnError:false, displayMode:true}),
+    katex.renderToString('\\textbf{Improved Euler (Heun):}\\\\[0.3em]k_1=f(x_n,y_n),\\quad k_2=f(x_n+h,\\,y_n+hk_1)\\\\[0.3em]y_{n+1}=y_n+\\tfrac{h}{2}(k_1+k_2)', {throwOnError:false, displayMode:true}),
+    katex.renderToString('\\textbf{RK4:}\\\\[0.3em]k_1=f(x_n,y_n)\\\\k_2=f(x_n+\\tfrac{h}{2},y_n+\\tfrac{h}{2}k_1)\\\\k_3=f(x_n+\\tfrac{h}{2},y_n+\\tfrac{h}{2}k_2)\\\\k_4=f(x_n+h,\\,y_n+hk_3)\\\\[0.3em]y_{n+1}=y_n+\\tfrac{h}{6}(k_1+2k_2+2k_3+k_4)', {throwOnError:false, displayMode:true}),
+  ].join('<hr style="border:none;border-top:1px solid var(--border);margin:0.75rem 0;">');
+}
+
+// ── Convergence vs h ──────────────────────────────────────────────────────────
+function drawConvergence() {
+  const key = document.getElementById('ode-sel').value;
+  const ode = ODES[key];
+  const x0  = g('x0-s'), y0 = g('y0-s');
+  const h0  = g('h-s'),  n0 = parseInt(g('n-s'));
+  const xSpan = h0 * n0;
+  if (xSpan <= 0) return;
+
+  const xEnd  = x0 + xSpan;
+  const yTrue = exactAt(ode, x0, y0, xEnd);
+
+  // n from 2 to 80; h = xSpan/n
+  const nVals  = Array.from({length:79}, (_,i) => i+2);
+  const hVals  = nVals.map(n => xSpan/n);
+  const errE=[], errIE=[], errRK=[];
+
+  for (const ni of nVals) {
+    const hi = xSpan / ni;
+    errE.push( Math.abs(eulerSteps(ode.f,x0,y0,hi,ni).ys[ni]  - yTrue));
+    errIE.push(Math.abs(heunSteps( ode.f,x0,y0,hi,ni).ys[ni]  - yTrue));
+    errRK.push(Math.abs(rk4Steps(  ode.f,x0,y0,hi,ni).ys[ni]  - yTrue));
+  }
+
+  // Reference slopes anchored at h[0]
+  const a0 = errE[0]  || 1e-4;
+  const b0 = errIE[0] || 1e-4;
+  const c0 = errRK[0] || 1e-4;
+  const refH1 = hVals.map(h => a0 * (h/hVals[0]));
+  const refH2 = hVals.map(h => b0 * (h/hVals[0])**2);
+  const refH4 = hVals.map(h => c0 * (h/hVals[0])**4);
+
+  Plotly.react('conv-plot', [
+    {x:hVals, y:errE,  mode:'lines', name:'Euler',          line:{color:'#4A8FD4',width:2}},
+    {x:hVals, y:errIE, mode:'lines', name:'Improved Euler', line:{color:'#E87040',width:2}},
+    {x:hVals, y:errRK, mode:'lines', name:'RK4',            line:{color:'#A056E0',width:2.5}},
+    {x:hVals, y:refH1, mode:'lines', name:'O(h)',           line:{color:'#89A4BC',width:1.2,dash:'dash'}},
+    {x:hVals, y:refH2, mode:'lines', name:'O(h²)',          line:{color:'#E8C040',width:1.2,dash:'dash'}},
+    {x:hVals, y:refH4, mode:'lines', name:'O(h⁴)',          line:{color:'#D2E0EE',width:1.2,dash:'longdash'}},
+  ], {
+    ...BASE,
+    margin:{l:52, r:16, t:10, b:44},
+    showlegend:true,
+    legend:{x:0.01,y:0.01,bgcolor:'rgba(12,26,48,0.8)',bordercolor:'#1A304D',borderwidth:1,font:{size:11}},
+    xaxis:{title:'h (step size)', type:'log', autorange:'reversed', ...AX},
+    yaxis:{title:'|Error at xₙ|', type:'log', exponentformat:'power', ...AX},
+  }, CFG);
+}
+
+// ── Expanders ─────────────────────────────────────────────────────────────────
+function toggleExp(head) {
   const body=head.nextElementSibling, arrow=head.querySelector('.expander-arrow');
   body.classList.toggle('hidden');
-  arrow.style.transform=body.classList.contains('hidden')?'':'rotate(180deg)';
+  arrow.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
 }
 
+function toggleConv(head) {
+  const body=head.nextElementSibling, arrow=head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrow.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+  if (!body.classList.contains('hidden') && !convPlotReady) {
+    drawConvergence();
+    convPlotReady = true;
+  }
+}
+
+function onOdeChange() { convPlotReady = false; build(); }
+
 let _t;
-function schedule(){clearTimeout(_t);_t=setTimeout(build,80);}
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 80); }
 window.addEventListener('load', build);
 </script>
 </body>
