@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Newton's Law of Cooling</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Newton's Law of Cooling</h1>
+  <p class="demo-eq">$\dfrac{dT}{dt} = k\,(T_{\rm env} - T), \quad T(0) = T_0$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Scenario</div>
+      <div class="ctrl-row">
+        <select id="scenario-sel" onchange="loadScenario()">
+          <option value="custom">Custom</option>
+          <option value="coffee">Hot coffee cooling</option>
+          <option value="drink">Cold drink warming</option>
+          <option value="forensic">Forensic — body cooling</option>
+          <option value="oven">Oven preheating</option>
+        </select>
+      </div>
+      <div id="scenario-desc" style="font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; min-height:2.5rem;"></div>
+
+      <div class="ctrl-section">Parameters</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">T₀ (initial °) <span class="ctrl-val" id="T0-v">180</span></div>
+        <input type="range" id="T0-s" min="-20" max="500" step="1" value="180"
+               oninput="sv('T0-v',this.value,0); setScenarioCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">T_env (ambient °) <span class="ctrl-val" id="Te-v">68</span></div>
+        <input type="range" id="Te-s" min="-20" max="500" step="1" value="68"
+               oninput="sv('Te-v',this.value,0); setScenarioCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Rate k <span class="ctrl-val" id="k-v">0.10</span></div>
+        <input type="range" id="k-s" min="0.005" max="1" step="0.005" value="0.1"
+               oninput="sv('k-v',this.value,3); setScenarioCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span <span class="ctrl-val" id="ts-v">60</span> min</div>
+        <input type="range" id="ts-s" min="5" max="240" step="5" value="60"
+               oninput="sv('ts-v',this.value,0); schedule()">
+      </div>
+
+      <div style="margin-top:1.25rem; padding-top:1rem; border-top:1px solid var(--border);">
+        <div id="formula-box" style="text-align:center; min-height:3rem; font-size:0.85rem; color:var(--muted);"></div>
+      </div>
+
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box">
+        <div id="main-plot" style="height:340px;"></div>
+      </div>
+
+      <!-- Semi-log plot -->
+      <div class="plot-box">
+        <div id="semilog-plot" style="height:220px;"></div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric">
+          <div class="metric-label">Time Constant τ</div>
+          <div class="metric-value" id="m-tau">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Half-life t½</div>
+          <div class="metric-value" id="m-half">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">T at midpoint</div>
+          <div class="metric-value plain" id="m-Tmid">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">T(T_span)</div>
+          <div class="metric-value plain" id="m-Tend">—</div>
+        </div>
+      </div>
+
+      <!-- Find-time expander -->
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>🔍 Find time to reach a target temperature</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap; padding:0.25rem 0 0.5rem;">
+            <div style="color:var(--muted); font-size:0.875rem;">Target T =</div>
+            <input type="number" id="target-T" value="100" step="1"
+                   style="width:5rem; padding:0.25rem 0.4rem; background:var(--card-alt);
+                          border:1px solid var(--border); border-radius:6px;
+                          color:var(--text); font-size:0.875rem;"
+                   oninput="updateTarget()">
+            <div style="color:var(--muted); font-size:0.875rem;">°</div>
+          </div>
+          <div id="target-result" style="font-size:0.85rem; color:var(--muted); min-height:1.5rem;"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Scenarios ─────────────────────────────────────────────────────────────────
+const SCENARIOS = {
+  custom:   { T0:180, Te:68,  k:0.10, ts:60,  desc:'' },
+  coffee:   { T0:185, Te:68,  k:0.08, ts:90,  desc:'A freshly poured cup of coffee (185°F) cooling in a 68°F room. How long until it reaches drinking temperature (~140°F)?' },
+  drink:    { T0:38,  Te:72,  k:0.07, ts:60,  desc:'A cold drink (38°F) warming up in a 72°F room. How long until it becomes unpleasantly warm (>55°F)?' },
+  forensic: { T0:98.6,Te:68,  k:0.07, ts:240, desc:'A body cools from normal temperature (98.6°F) toward room temperature. Given observed T at discovery, estimate time of death (k ≈ 0.07 °F/min).' },
+  oven:     { T0:70,  Te:400, k:0.06, ts:90,  desc:'An oven preheating from room temperature (70°F) to 400°F. Note the equation is unchanged — T₀ < T_env means heating rather than cooling.' },
+};
+
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:56, r:20, t:30, b:48}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+
+function sv(id, v, dec) {
+  document.getElementById(id).textContent = parseFloat(v).toFixed(dec);
+}
+function g(id) { return parseFloat(document.getElementById(id).value); }
+function fmtN(v, dec=2) { return isFinite(v) && Math.abs(v)<1e6 ? v.toFixed(dec) : '—'; }
+
+// Solution: T(t) = Te + (T0 - Te)*e^(-k*t)
+function T_soln(T0, Te, k, t) { return Te + (T0 - Te) * Math.exp(-k * t); }
+
+function linspace(a, b, n) {
+  return Array.from({length:n}, (_,i) => a + i*(b-a)/(n-1));
+}
+
+let _ignoreScenario = false;
+function setScenarioCustom() {
+  if (_ignoreScenario) return;
+  document.getElementById('scenario-sel').value = 'custom';
+  document.getElementById('scenario-desc').textContent = '';
+}
+
+function loadScenario() {
+  const key = document.getElementById('scenario-sel').value;
+  const sc  = SCENARIOS[key];
+  _ignoreScenario = true;
+  document.getElementById('T0-s').value = sc.T0; sv('T0-v', sc.T0, 0);
+  document.getElementById('Te-s').value = sc.Te; sv('Te-v', sc.Te, 0);
+  document.getElementById('k-s').value  = sc.k;  sv('k-v',  sc.k,  3);
+  document.getElementById('ts-s').value = sc.ts; sv('ts-v', sc.ts, 0);
+  document.getElementById('scenario-desc').textContent = sc.desc;
+  _ignoreScenario = false;
+  build();
+}
+
+// ── Main build ────────────────────────────────────────────────────────────────
+function build() {
+  const T0 = g('T0-s'), Te = g('Te-s'), k = g('k-s'), tSpan = g('ts-s');
+  if (k <= 0 || tSpan <= 0) return;
+
+  const ts = linspace(0, tSpan, 500);
+  const Ts = ts.map(t => T_soln(T0, Te, k, t));
+
+  const isCooling = T0 > Te;
+  const titleStr  = isCooling ? 'Cooling toward T_env' : 'Heating toward T_env';
+  const mainColor = isCooling ? '#60A5FA' : '#F87171';
+
+  // ── Main T(t) plot ──
+  const traces = [
+    // T_env reference line
+    {x:[0,tSpan], y:[Te,Te], mode:'lines',
+     line:{color:'#89A4BC',width:1.5,dash:'dot'},
+     name:`T_env = ${Te.toFixed(0)}°`},
+    // T0 marker
+    {x:[0], y:[T0], mode:'markers',
+     marker:{color:'#E8C040',size:11,symbol:'star',line:{color:'white',width:1.5}},
+     name:`T₀ = ${T0.toFixed(1)}°`},
+    // Solution curve
+    {x:ts, y:Ts, mode:'lines',
+     line:{color:mainColor,width:3},
+     name:'T(t)'},
+  ];
+
+  // Time constant marker at t = τ = 1/k
+  const tau = 1/k;
+  if (tau < tSpan) {
+    const Ttau = T_soln(T0, Te, k, tau);
+    traces.push({
+      x:[tau], y:[Ttau], mode:'markers',
+      marker:{color:'#A056E0',size:9,symbol:'diamond',line:{color:'white',width:1.5}},
+      name:`τ = 1/k = ${tau.toFixed(1)}  (T ≈ ${Ttau.toFixed(1)}°)`});
+  }
+
+  Plotly.react('main-plot', traces, {
+    ...BASE, showlegend:true,
+    title:{text:titleStr, font:{size:13}},
+    legend:{x:0.01,y:isCooling?0.01:0.99,
+            xanchor:'left',yanchor:isCooling?'bottom':'top',
+            bgcolor:'rgba(12,26,48,0.8)',bordercolor:'#1A304D',borderwidth:1,font:{size:11}},
+    xaxis:{title:'t (min)', ...AX},
+    yaxis:{title:'T (°)', ...AX},
+  }, CFG);
+
+  // ── Semi-log plot: ln|T − T_env| vs t ──
+  // Should be a perfectly straight line with slope −k
+  const logDiff = ts.map((t,i) => {
+    const d = Math.abs(Ts[i] - Te);
+    return d > 1e-10 ? Math.log(d) : NaN;
+  });
+  const refLine = ts.map(t => Math.log(Math.abs(T0-Te)) - k*t);
+
+  const semiTraces = [
+    {x:ts, y:logDiff, mode:'lines',
+     line:{color:mainColor,width:2.5}, name:'ln|T − T_env|  (data)'},
+    {x:ts, y:refLine, mode:'lines',
+     line:{color:'#E8C040',width:1.5,dash:'dash'},
+     name:`−kt + ln|T₀ − T_env|  (slope = −${k.toFixed(3)})`},
+  ];
+
+  Plotly.react('semilog-plot', semiTraces, {
+    ...BASE,
+    margin:{l:56, r:20, t:30, b:44},
+    title:{text:'Semi-log plot confirms exponential decay', font:{size:12}},
+    showlegend:true,
+    legend:{x:0.01,y:0.01,xanchor:'left',yanchor:'bottom',
+            bgcolor:'rgba(12,26,48,0.8)',bordercolor:'#1A304D',borderwidth:1,font:{size:10}},
+    xaxis:{title:'t (min)',...AX},
+    yaxis:{title:'ln|T − T_env|',...AX},
+  }, CFG);
+
+  // ── Metrics ──
+  const half  = Math.log(2) / k;
+  const Tmid  = T_soln(T0, Te, k, tSpan/2);
+  const Tend  = T_soln(T0, Te, k, tSpan);
+  document.getElementById('m-tau').textContent   = fmtN(tau,2)+' min';
+  document.getElementById('m-half').textContent  = fmtN(half,2)+' min';
+  document.getElementById('m-Tmid').textContent  = fmtN(Tmid,1)+'°';
+  document.getElementById('m-Tend').textContent  = fmtN(Tend,1)+'°';
+
+  // ── Formula ──
+  document.getElementById('formula-box').innerHTML = katex.renderToString(
+    `T(t) = T_{\\rm env} + (T_0 - T_{\\rm env})\\,e^{-kt}`,
+    {throwOnError:false, displayMode:true});
+
+  updateTarget();
+}
+
+// ── Find time to reach target ─────────────────────────────────────────────────
+function updateTarget() {
+  const T0 = g('T0-s'), Te = g('Te-s'), k = g('k-s');
+  const Tgt = parseFloat(document.getElementById('target-T').value);
+  const el  = document.getElementById('target-result');
+
+  if (!isFinite(Tgt) || !isFinite(T0) || !isFinite(Te) || k <= 0) { el.textContent=''; return; }
+
+  // T(t) = Te + (T0-Te)e^{-kt} = Tgt
+  // e^{-kt} = (Tgt-Te)/(T0-Te)
+  // t = -ln(...)/k
+  const ratio = (Tgt - Te) / (T0 - Te);
+  if (ratio <= 0 || ratio > 1) {
+    el.innerHTML = `<span style="color:#D44848;">Target ${Tgt.toFixed(1)}° is outside the reachable range [${Math.min(T0,Te).toFixed(1)}°, ${Math.max(T0,Te).toFixed(1)}°].</span>`;
+    return;
+  }
+  const tStar = -Math.log(ratio) / k;
+  el.innerHTML = `T reaches <strong>${Tgt.toFixed(1)}°</strong> at <strong style="color:#4ADE80;">t = ${tStar.toFixed(2)} min</strong>.`;
+}
+
+function toggleExp(head) {
+  const body=head.nextElementSibling, arrow=head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrow.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 80); }
+window.addEventListener('load', () => { loadScenario(); });
+</script>
+</body>
+</html>
