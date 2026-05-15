@@ -4,235 +4,478 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MATH 245 — Interactive Demos</title>
+  <meta name="theme-color" content="#0b1535">
   <link rel="stylesheet" href="style.css">
   <style>
-    body {
-      background: radial-gradient(ellipse at 50% 0%, #0D2040 0%, var(--bg) 65%);
+    /* ── Page chrome ── */
+    body { padding: 0; }
+
+    #particles-canvas {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.45;
+    }
+
+    .page-wrap {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
       min-height: 100vh;
     }
 
-    .homescreen {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 3rem 2rem 5rem;
+    /* ── Nav ── */
+    .site-nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px 32px;
+      background: rgba(8,15,42,0.72);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid rgba(74,122,255,0.18);
+    }
+    .nav-emblem {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #4d9fff 0%, #f0a500 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800; font-size: 1rem;
+      color: #fff;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px rgba(77,159,255,0.4);
+    }
+    .nav-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700; font-size: 1.05rem;
+      letter-spacing: 0.01em;
+      color: var(--white); line-height: 1.1;
+    }
+    .nav-subtitle {
+      font-size: 0.68rem; font-weight: 400;
+      color: var(--muted);
+      letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    .nav-spacer { flex: 1; }
+    .nav-chip {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 13px;
+      border-radius: 100px;
+      background: rgba(15,29,69,0.55);
+      border: 1px solid rgba(74,122,255,0.18);
+      font-size: 0.7rem; font-weight: 500;
+      color: var(--muted); letter-spacing: 0.04em;
+    }
+    .nav-chip-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--blue-bright);
+      box-shadow: 0 0 6px var(--blue-bright);
+      animation: blink 2.4s infinite;
+    }
+    @keyframes blink {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.45; transform:scale(0.7); }
     }
 
-    .hs-header {
+    /* ── Hero ── */
+    .hero {
+      padding: 56px 32px 40px;
       text-align: center;
-      margin-bottom: 2.5rem;
     }
-
-    .hs-title {
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: var(--text);
+    .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 4px 16px;
+      border-radius: 100px;
+      background: rgba(240,165,0,0.12);
+      border: 1px solid rgba(240,165,0,0.30);
+      font-size: 0.7rem; font-weight: 600;
+      color: var(--gold);
+      letter-spacing: 0.12em; text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+    .hero-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: clamp(2.2rem, 5.5vw, 3.8rem);
+      font-weight: 800; line-height: 1.06;
       letter-spacing: -0.02em;
-      margin: 0 0 0.35rem;
+      margin-bottom: 14px;
     }
-
-    .hs-sub {
-      font-size: 0.875rem;
+    .gradient-text {
+      background: linear-gradient(135deg, var(--blue-bright) 0%, var(--gold) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      font-size: 1rem;
       color: var(--muted);
-      margin: 0;
+      max-width: 480px;
+      margin: 0 auto;
+      line-height: 1.65;
     }
 
+    /* ── Section label ── */
     .section-label {
-      font-size: 0.6875rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
+      padding: 0 40px 14px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.72rem; font-weight: 600;
+      letter-spacing: 0.11em; text-transform: uppercase;
       color: var(--muted);
-      margin: 2.25rem 0 1.25rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-label::after {
+      content: '';
+      flex: 1; height: 1px;
+      background: linear-gradient(90deg, rgba(74,122,255,0.22), transparent);
     }
 
-    .icon-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1.75rem 2rem;
+    /* ── App grid ── */
+    .app-grid-section { padding: 0 32px 52px; }
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+      gap: 24px 20px;
+      max-width: 1080px;
+      margin: 0 auto;
     }
 
-    /* ── Individual app icon ── */
-    .app-icon {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.55rem;
-      text-decoration: none;
-      width: 80px;
-      transition: transform 0.14s ease;
+    /* ── App card ── */
+    .app-card {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 10px;
+      padding: 18px 12px 16px;
+      border-radius: 20px;
+      background: rgba(15,29,69,0.55);
+      border: 1px solid rgba(74,122,255,0.18);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      cursor: pointer; position: relative; overflow: hidden;
+      transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1),
+                  box-shadow 0.28s cubic-bezier(0.34,1.56,0.64,1),
+                  border-color 0.15s ease;
+      --accent: #4d9fff;
+      text-decoration: none; color: inherit;
     }
+    /* top shimmer */
+    .app-card::before {
+      content: '';
+      position: absolute; top: 0; left: 12%; right: 12%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent);
+    }
+    .app-card:hover {
+      transform: translateY(-5px) scale(1.03);
+      border-color: rgba(255,255,255,0.14);
+      box-shadow:
+        0 18px 44px rgba(0,0,0,0.5),
+        0 0 0 1px rgba(255,255,255,0.05),
+        0 0 28px -4px var(--accent);
+    }
+    .app-card:active { transform: scale(0.95); }
 
-    .app-icon:hover  { transform: scale(1.09); }
-    .app-icon:active { transform: scale(0.93); }
-
+    /* ── Icon tile ── */
     .icon-tile {
-      width: 74px;
-      height: 74px;
-      border-radius: 19px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 5px 18px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.3);
-      position: relative;
-      overflow: hidden;
+      width: 96px; height: 96px;
+      border-radius: 22px;
+      display: flex; align-items: center; justify-content: center;
+      position: relative; overflow: hidden;
+      flex-shrink: 0;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.07);
+      transition: transform 0.4s ease, box-shadow 0.28s cubic-bezier(0.34,1.56,0.64,1);
     }
-
-    /* Glass gloss on top half */
+    .app-card:hover .icon-tile {
+      transform: scale(1.06);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6), 0 0 0 1.5px rgba(255,255,255,0.12),
+                  0 0 18px -3px var(--accent);
+    }
+    /* glass gloss */
     .icon-tile::after {
       content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(
-        160deg,
-        rgba(255,255,255,0.18) 0%,
-        rgba(255,255,255,0.04) 45%,
-        rgba(0,0,0,0) 100%
-      );
+      position: absolute; inset: 0;
+      background: linear-gradient(145deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.04) 45%, transparent 65%);
       border-radius: inherit;
+      pointer-events: none;
     }
-
     .icon-sym {
-      font-size: 2.1rem;
-      line-height: 1;
-      z-index: 1;
+      font-size: 2.4rem; line-height: 1;
+      z-index: 1; position: relative;
       color: rgba(255,255,255,0.95);
-      text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
       font-family: 'Georgia', 'Times New Roman', serif;
       user-select: none;
     }
+    .icon-sym.emoji { font-family: inherit; }
 
-    /* Emoji icons don't need the serif font */
-    .icon-sym.emoji {
-      font-family: inherit;
+    .app-name {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.8rem; font-weight: 600;
+      text-align: center; line-height: 1.25;
+      letter-spacing: 0.005em;
+      color: var(--white);
     }
 
-    .icon-name {
-      font-size: 0.6875rem;
-      color: var(--text);
-      text-align: center;
-      line-height: 1.35;
-      font-weight: 500;
-      width: 80px;
+    .app-tag {
+      font-size: 0.6rem; font-weight: 700;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      padding: 2px 9px;
+      border-radius: 100px;
+      color: var(--accent);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .app-card:hover .app-tag {
+      background: color-mix(in srgb, var(--accent) 15%, transparent);
     }
 
     /* ── Gradient palettes ── */
-    .ic-blue   { background: linear-gradient(145deg, #4A8FD4 0%, #1A4080 100%); }
-    .ic-purple { background: linear-gradient(145deg, #9B72E8 0%, #4C1D95 100%); }
-    .ic-teal   { background: linear-gradient(145deg, #12C289 0%, #065A40 100%); }
-    .ic-orange { background: linear-gradient(145deg, #F5A623 0%, #8B4800 100%); }
-    .ic-rose   { background: linear-gradient(145deg, #F46F7B 0%, #8B1A2A 100%); }
-    .ic-amber  { background: linear-gradient(145deg, #FA8431 0%, #7C2D12 100%); }
-    .ic-indigo { background: linear-gradient(145deg, #6E74F1 0%, #2E2B82 100%); }
-    .ic-cyan    { background: linear-gradient(145deg, #2DD4EF 0%, #0A4F62 100%); }
-    .ic-emerald { background: linear-gradient(145deg, #4ADE80 0%, #14532D 100%); }
-    .ic-sky     { background: linear-gradient(145deg, #60A5FA 0%, #1E3A8A 100%); }
+    .ic-blue    { background: linear-gradient(145deg,#4d9fff 0%,#1a4080 100%); --accent:#4d9fff; }
+    .ic-purple  { background: linear-gradient(145deg,#9b72e8 0%,#4c1d95 100%); --accent:#9b72e8; }
+    .ic-emerald { background: linear-gradient(145deg,#4ade80 0%,#14532d 100%); --accent:#4ade80; }
+    .ic-sky     { background: linear-gradient(145deg,#60a5fa 0%,#1e3a8a 100%); --accent:#60a5fa; }
+    .ic-teal    { background: linear-gradient(145deg,#12c289 0%,#065a40 100%); --accent:#12c289; }
+    .ic-orange  { background: linear-gradient(145deg,#f5a623 0%,#8b4800 100%); --accent:#f5a623; }
+    .ic-rose    { background: linear-gradient(145deg,#f46f7b 0%,#8b1a2a 100%); --accent:#f46f7b; }
+    .ic-amber   { background: linear-gradient(145deg,#fa8431 0%,#7c2d12 100%); --accent:#fa8431; }
+    .ic-indigo  { background: linear-gradient(145deg,#6e74f1 0%,#2e2b82 100%); --accent:#6e74f1; }
+    .ic-cyan    { background: linear-gradient(145deg,#2dd4ef 0%,#0a4f62 100%); --accent:#2dd4ef; }
+
+    /* ── Footer ── */
+    .site-footer {
+      margin-top: auto;
+      padding: 20px 32px;
+      border-top: 1px solid rgba(74,122,255,0.18);
+      display: flex; align-items: center; gap: 14px;
+      background: rgba(8,15,42,0.5);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .footer-emblem {
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      background: linear-gradient(135deg,#4d9fff,#f0a500);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Outfit',sans-serif;
+      font-weight: 800; font-size: 0.75rem;
+      color: #fff; opacity: 0.75; flex-shrink: 0;
+    }
+    .footer-text {
+      font-size: 0.72rem; color: var(--muted); line-height: 1.5;
+    }
+    .footer-text strong { color: var(--white); font-weight: 600; }
+    .footer-spacer { flex: 1; }
+
+    /* ── Responsive ── */
+    @media (max-width: 680px) {
+      .site-nav        { padding: 10px 16px; }
+      .hero            { padding: 36px 16px 28px; }
+      .app-grid-section{ padding: 0 16px 40px; }
+      .section-label   { padding: 0 16px 12px; }
+      .site-footer     { padding: 16px; }
+      .app-grid        { grid-template-columns: repeat(auto-fill, minmax(128px,1fr)); gap:18px 14px; }
+      .icon-tile       { width:82px; height:82px; }
+      .nav-chip        { display: none; }
+    }
+    @media (min-width: 900px) {
+      .app-grid { grid-template-columns: repeat(auto-fill, minmax(158px,1fr)); gap:28px; }
+    }
+    @media (min-width: 1200px) {
+      .app-grid { grid-template-columns: repeat(6,1fr); }
+    }
   </style>
 </head>
 <body>
-<div class="homescreen">
 
-  <div class="hs-header">
-    <h1 class="hs-title">MATH 245 Interactive Demos</h1>
-    <p class="hs-sub">ODEs &amp; Linear Algebra &nbsp;·&nbsp; No software required</p>
-  </div>
+<canvas id="particles-canvas" aria-hidden="true"></canvas>
 
-  <div class="section-label">Calculus &amp; Integration</div>
-  <div class="icon-row">
+<div class="page-wrap">
 
-    <a class="app-icon" href="/riemann/">
-      <div class="icon-tile ic-blue">
-        <span class="icon-sym">∫</span>
+  <!-- ── Nav ──────────────────────────────────────────────────────────── -->
+  <nav class="site-nav">
+    <div class="nav-emblem">∂</div>
+    <div>
+      <div class="nav-title">MATH 245 Demos</div>
+      <div class="nav-subtitle">ODEs &amp; Linear Algebra</div>
+    </div>
+    <div class="nav-spacer"></div>
+    <div class="nav-chip">
+      <div class="nav-chip-dot"></div>
+      10 Apps
+    </div>
+  </nav>
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+  <header class="hero">
+    <div class="hero-eyebrow">Spring 2026 &nbsp;·&nbsp; No software required</div>
+    <h1 class="hero-title">
+      <span class="gradient-text">Interactive Demos</span>
+    </h1>
+    <p class="hero-sub">
+      Explore key concepts from ODEs &amp; Linear Algebra through live, adjustable simulations.
+    </p>
+  </header>
+
+  <main>
+
+    <!-- ── Calculus & Integration ────────────────────────────────────── -->
+    <section class="app-grid-section">
+      <div class="section-label">Calculus &amp; Integration</div>
+      <div class="app-grid">
+
+        <a class="app-card" href="/riemann/" style="--accent:#4d9fff">
+          <div class="icon-tile ic-blue"><span class="icon-sym">∫</span></div>
+          <div class="app-name">Riemann Integration</div>
+          <div class="app-tag" style="--accent:#4d9fff">Calculus</div>
+        </a>
+
+        <a class="app-card" href="/fourier/" style="--accent:#9b72e8">
+          <div class="icon-tile ic-purple"><span class="icon-sym">≈</span></div>
+          <div class="app-name">Fourier Series</div>
+          <div class="app-tag" style="--accent:#9b72e8">Calculus</div>
+        </a>
+
       </div>
-      <div class="icon-name">Riemann<br>Integration</div>
-    </a>
+    </section>
 
-    <a class="app-icon" href="/fourier/">
-      <div class="icon-tile ic-purple">
-        <span class="icon-sym">≈</span>
+    <!-- ── First-Order ODEs ──────────────────────────────────────────── -->
+    <section class="app-grid-section">
+      <div class="section-label">First-Order ODEs</div>
+      <div class="app-grid">
+
+        <a class="app-card" href="/population/" style="--accent:#4ade80">
+          <div class="icon-tile ic-emerald"><span class="icon-sym">P</span></div>
+          <div class="app-name">Population Growth &amp; Decay</div>
+          <div class="app-tag" style="--accent:#4ade80">1st-Order</div>
+        </a>
+
+        <a class="app-card" href="/cooling/" style="--accent:#60a5fa">
+          <div class="icon-tile ic-sky"><span class="icon-sym">θ</span></div>
+          <div class="app-name">Newton's Cooling</div>
+          <div class="app-tag" style="--accent:#60a5fa">1st-Order</div>
+        </a>
+
       </div>
-      <div class="icon-name">Fourier<br>Series</div>
-    </a>
+    </section>
 
-  </div>
+    <!-- ── Numerical Methods ─────────────────────────────────────────── -->
+    <section class="app-grid-section">
+      <div class="section-label">Numerical Methods</div>
+      <div class="app-grid">
 
-  <div class="section-label">First-Order ODEs</div>
-  <div class="icon-row">
+        <a class="app-card" href="/euler/" style="--accent:#12c289">
+          <div class="icon-tile ic-teal"><span class="icon-sym">∂</span></div>
+          <div class="app-name">ODE Solvers</div>
+          <div class="app-tag" style="--accent:#12c289">Numerical</div>
+        </a>
 
-    <a class="app-icon" href="/population/">
-      <div class="icon-tile ic-emerald">
-        <span class="icon-sym">P</span>
       </div>
-      <div class="icon-name">Population<br>Growth &amp; Decay</div>
-    </a>
+    </section>
 
-    <a class="app-icon" href="/cooling/">
-      <div class="icon-tile ic-sky">
-        <span class="icon-sym">θ</span>
+    <!-- ── Second-Order ODEs ─────────────────────────────────────────── -->
+    <section class="app-grid-section">
+      <div class="section-label">Second-Order ODEs</div>
+      <div class="app-grid">
+
+        <a class="app-card" href="/smd/" style="--accent:#f5a623">
+          <div class="icon-tile ic-orange"><span class="icon-sym emoji">🌀</span></div>
+          <div class="app-name">Spring-Mass-Damper</div>
+          <div class="app-tag" style="--accent:#f5a623">2nd-Order</div>
+        </a>
+
+        <a class="app-card" href="/resonance/" style="--accent:#f46f7b">
+          <div class="icon-tile ic-rose"><span class="icon-sym">ω</span></div>
+          <div class="app-name">Forced Oscillations</div>
+          <div class="app-tag" style="--accent:#f46f7b">2nd-Order</div>
+        </a>
+
+        <a class="app-card" href="/rlc/" style="--accent:#fa8431">
+          <div class="icon-tile ic-amber"><span class="icon-sym emoji">⚡</span></div>
+          <div class="app-name">Series RLC Circuit</div>
+          <div class="app-tag" style="--accent:#fa8431">2nd-Order</div>
+        </a>
+
       </div>
-      <div class="icon-name">Newton's<br>Cooling</div>
-    </a>
+    </section>
 
-  </div>
+    <!-- ── Systems & Nonlinear Dynamics ─────────────────────────────── -->
+    <section class="app-grid-section">
+      <div class="section-label">Systems &amp; Nonlinear Dynamics</div>
+      <div class="app-grid">
 
-  <div class="section-label">Numerical Methods</div>
-  <div class="icon-row">
+        <a class="app-card" href="/trdet/" style="--accent:#6e74f1">
+          <div class="icon-tile ic-indigo"><span class="icon-sym">λ</span></div>
+          <div class="app-name">Trace-Det Plane</div>
+          <div class="app-tag" style="--accent:#6e74f1">Systems</div>
+        </a>
 
-    <a class="app-icon" href="/euler/">
-      <div class="icon-tile ic-teal">
-        <span class="icon-sym">Δ</span>
+        <a class="app-card" href="/pendulum/" style="--accent:#2dd4ef">
+          <div class="icon-tile ic-cyan"><span class="icon-sym">∞</span></div>
+          <div class="app-name">Double Pendulum</div>
+          <div class="app-tag" style="--accent:#2dd4ef">Systems</div>
+        </a>
+
       </div>
-      <div class="icon-name">ODE<br>Solvers</div>
-    </a>
+    </section>
 
-  </div>
+  </main>
 
-  <div class="section-label">Second-Order ODEs</div>
-  <div class="icon-row">
+  <!-- ── Footer ───────────────────────────────────────────────────────── -->
+  <footer class="site-footer">
+    <div class="footer-emblem">∂</div>
+    <div class="footer-text">
+      <strong>MATH 245 — ODEs &amp; Linear Algebra</strong><br>
+      USAFA Department of Mathematical Sciences
+    </div>
+    <div class="footer-spacer"></div>
+  </footer>
 
-    <a class="app-icon" href="/smd/">
-      <div class="icon-tile ic-orange">
-        <span class="icon-sym emoji">🌀</span>
-      </div>
-      <div class="icon-name">Spring-Mass-<br>Damper</div>
-    </a>
+</div><!-- /page-wrap -->
 
-    <a class="app-icon" href="/resonance/">
-      <div class="icon-tile ic-rose">
-        <span class="icon-sym">ω</span>
-      </div>
-      <div class="icon-name">Forced<br>Oscillations</div>
-    </a>
+<!-- ── Particle animation (gold + blue, matching ECE store) ────────────── -->
+<script>
+(function () {
+  const canvas = document.getElementById('particles-canvas');
+  const ctx    = canvas.getContext('2d');
+  let W, H, particles = [];
 
-    <a class="app-icon" href="/rlc/">
-      <div class="icon-tile ic-amber">
-        <span class="icon-sym emoji">⚡</span>
-      </div>
-      <div class="icon-name">Series RLC<br>Circuit</div>
-    </a>
+  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  function rand(a, b) { return Math.random() * (b - a) + a; }
 
-  </div>
+  function makeParticle() {
+    return {
+      x: rand(0, W), y: rand(0, H),
+      r: rand(1, 2.4),
+      vx: rand(-0.12, 0.12), vy: rand(-0.28, -0.06),
+      alpha: rand(0.18, 0.65),
+      hue: Math.random() > 0.68 ? '#f0a500' : '#3a7bd5',
+    };
+  }
 
-  <div class="section-label">Systems &amp; Nonlinear Dynamics</div>
-  <div class="icon-row">
+  function init() { resize(); particles = Array.from({length: 80}, makeParticle); }
 
-    <a class="app-icon" href="/trdet/">
-      <div class="icon-tile ic-indigo">
-        <span class="icon-sym">λ</span>
-      </div>
-      <div class="icon-name">Trace-Det<br>Plane</div>
-    </a>
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    particles.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.hue;
+      ctx.globalAlpha = p.alpha;
+      ctx.fill();
+      p.x += p.vx; p.y += p.vy;
+      if (p.y + p.r < 0)  Object.assign(p, makeParticle(), { y: H + p.r });
+      if (p.x < -p.r)     p.x = W + p.r;
+      if (p.x > W + p.r)  p.x = -p.r;
+    });
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  }
 
-    <a class="app-icon" href="/pendulum/">
-      <div class="icon-tile ic-cyan">
-        <span class="icon-sym">∞</span>
-      </div>
-      <div class="icon-name">Double<br>Pendulum</div>
-    </a>
+  window.addEventListener('resize', resize);
+  init(); draw();
+})();
+</script>
 
-  </div>
-
-</div>
 </body>
 </html>

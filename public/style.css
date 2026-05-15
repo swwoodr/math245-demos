@@ -1,133 +1,123 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;600;700;800&display=swap');
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MATH 245 Interactive Demos — Design System
+   Navy + Gold + Glass Morphism · Adapted from USAFA ECE App Store
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 
-/* ── USAFA Dark Theme ─────────────────────────────────────────────────────── */
+/* ── Design Tokens ──────────────────────────────────────────────────────── */
 :root {
-  --primary:      #4A8FD4;
-  --primary-dark: #2E72B5;
-  --primary-glow: rgba(74, 143, 212, 0.22);
-  --success:      #27A96C;
-  --error:        #D44848;
-  --bg:           #070E1B;
-  --card:         #0C1A30;
-  --card-alt:     #102038;
-  --text:         #D2E0EE;
-  --muted:        #5E7A96;
-  --border:       #1A304D;
-  --silver:       #89A4BC;
+  /* Core palette */
+  --navy-deep:    #080f2a;
+  --navy-bg:      #0b1535;
+  --navy-mid:     #0f1d45;
+  --navy-card:    #111e4a;
+  --blue-sky:     #3a7bd5;
+  --blue-bright:  #4d9fff;
+  --gold:         #f0a500;
+  --gold-light:   #fbbf24;
+  --white:        #e8edf8;
+  --muted:        #8796c4;
+  --success:      #34d399;
+  --danger:       #ef4444;
+
+  /* Glass system */
+  --glass-bg:     rgba(15, 29, 69, 0.60);
+  --glass-border: rgba(74, 122, 255, 0.20);
+  --glass-blur:   16px;
+
+  /* Typography */
+  --font-body:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Outfit', system-ui, sans-serif;
+  --font-mono:    ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Radii */
+  --radius-card:  14px;
+  --radius-sm:    10px;
+  --radius-pill:  100px;
+
+  /* Motion */
+  --ease-fast:    0.15s ease;
+  --ease-spring:  0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Backward-compat aliases used by demo pages ── */
+  --primary:      var(--blue-bright);
+  --primary-dark: var(--blue-sky);
+  --primary-glow: rgba(77, 159, 255, 0.20);
+  --bg:           var(--navy-bg);
+  --card:         var(--glass-bg);
+  --card-alt:     var(--navy-mid);
+  --border:       var(--glass-border);
+  --text:         var(--white);
+  --silver:       var(--muted);
 }
 
+/* ── Base ────────────────────────────────────────────────────────────────── */
 body {
-  font-family: system-ui, -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  font-family: var(--font-body);
+  background-color: var(--navy-bg);
+  color: var(--white);
   min-height: 100vh;
-  padding: 2rem 1.25rem;
+  overflow-x: hidden;
+  position: relative;
 }
 
-a { color: var(--primary); }
-
-/* ── Shared button ────────────────────────────────────────────────────────── */
-.btn {
-  display: inline-block;
-  padding: 0.625rem 1.25rem;
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.9375rem;
-  font-family: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  letter-spacing: 0.02em;
-  text-decoration: none;
-  transition: background 0.15s, box-shadow 0.15s;
-}
-.btn:hover {
-  background: var(--primary-dark);
-  box-shadow: 0 0 14px var(--primary-glow);
+/* Radial glow layers */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(58,123,213,0.22) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 85% 80%,  rgba(240,165,0,0.09)  0%, transparent 60%),
+    radial-gradient(ellipse 60% 50% at 15% 90%,  rgba(58,123,213,0.10) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
 }
 
-/* ── Landing page grid ────────────────────────────────────────────────────── */
-.landing-wrap {
-  max-width: 860px;
-  margin: 0 auto;
-}
-.landing-wrap h1 {
-  font-size: 1.875rem;
-  font-weight: 700;
-  margin-bottom: 0.375rem;
-}
-.landing-wrap .subtitle {
-  color: var(--muted);
-  margin-bottom: 2.5rem;
-  font-size: 1rem;
-}
-.demo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.25rem;
-}
-.demo-card {
-  display: flex;
-  flex-direction: column;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--primary);
-  border-radius: 12px;
-  padding: 1.75rem;
-  text-decoration: none;
-  color: var(--text);
-  transition: box-shadow 0.15s, border-color 0.15s;
-  cursor: pointer;
-}
-.demo-card:hover {
-  box-shadow: 0 4px 24px rgba(74,143,212,0.18);
-  border-color: var(--primary);
-}
-.demo-icon {
-  font-size: 2rem;
-  margin-bottom: 0.875rem;
-}
-.demo-title {
-  font-size: 1.125rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-.demo-desc {
-  font-size: 0.875rem;
-  color: var(--muted);
-  line-height: 1.55;
-  flex: 1;
-  margin-bottom: 1.25rem;
-}
-.demo-launch {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--primary);
+/* Subtle circuit grid */
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(58,123,213,0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(58,123,213,0.035) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
 }
 
-/* ── Demo page layout ─────────────────────────────────────────────────────── */
+a { color: var(--blue-bright); text-decoration: none; }
+
+/* ── Demo page wrap ───────────────────────────────────────────────────────── */
 .demo-wrap {
   max-width: 1120px;
   margin: 0 auto;
+  padding: 2rem 1.25rem;
+  position: relative;
+  z-index: 1;
 }
+
 .back-link {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
   color: var(--muted);
-  text-decoration: none;
   font-size: 0.875rem;
   margin-bottom: 1rem;
-  transition: color 0.15s;
+  transition: color var(--ease-fast);
 }
-.back-link:hover { color: var(--primary); }
+.back-link:hover { color: var(--blue-bright); }
 
 .demo-wrap h1 {
+  font-family: var(--font-heading);
   font-size: 1.625rem;
   font-weight: 700;
   margin-bottom: 0.25rem;
 }
+
 .demo-eq {
   font-size: 1rem;
   color: var(--muted);
@@ -141,20 +131,21 @@ a { color: var(--primary); }
   gap: 1.25rem;
   align-items: start;
 }
-@media (max-width: 720px) {
-  .demo-layout { grid-template-columns: 1fr; }
-}
+@media (max-width: 720px) { .demo-layout { grid-template-columns: 1fr; } }
 
 /* ── Controls sidebar ─────────────────────────────────────────────────────── */
 .controls {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-top: 2px solid var(--primary);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-top: 2px solid var(--blue-bright);
+  border-radius: var(--radius-card);
   padding: 1.25rem;
   position: sticky;
   top: 1.25rem;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
+
 .ctrl-section {
   font-size: 0.6875rem;
   font-weight: 700;
@@ -163,117 +154,125 @@ a { color: var(--primary); }
   color: var(--muted);
   margin: 1.1rem 0 0.625rem;
   padding-top: 1.1rem;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-border);
 }
 .ctrl-section:first-child { border-top: none; margin-top: 0; padding-top: 0; }
 
-.ctrl-row {
-  margin-bottom: 0.875rem;
-}
+.ctrl-row { margin-bottom: 0.875rem; }
+
 .ctrl-label {
   display: flex;
   justify-content: space-between;
   font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--silver);
+  font-weight: 500;
+  color: var(--white);
   margin-bottom: 0.35rem;
 }
+
 .ctrl-val {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--primary);
+  font-family: var(--font-mono);
+  color: var(--gold);
 }
+
 input[type="range"] {
   width: 100%;
-  accent-color: var(--primary);
+  accent-color: var(--blue-bright);
   cursor: pointer;
 }
+
 input[type="number"],
 select {
   width: 100%;
   padding: 0.5rem 0.7rem;
-  background: var(--card-alt);
-  border: 1.5px solid var(--border);
+  background: rgba(8, 15, 42, 0.7);
+  border: 1.5px solid var(--glass-border);
   border-radius: 8px;
-  color: var(--text);
+  color: var(--white);
   font-size: 0.9rem;
-  font-family: inherit;
+  font-family: var(--font-body);
   outline: none;
+  transition: border-color var(--ease-fast), box-shadow var(--ease-fast);
 }
 input[type="number"]:focus,
 select:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-glow);
+  border-color: var(--blue-bright);
+  box-shadow: 0 0 0 3px rgba(77,159,255,0.18);
 }
+
 .radio-group { display: flex; flex-direction: column; gap: 0.375rem; }
 .radio-option {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.45rem 0.625rem;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--glass-border);
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.875rem;
-  transition: border-color 0.12s, background 0.12s;
+  transition: border-color var(--ease-fast), background var(--ease-fast);
 }
 .radio-option:has(input:checked) {
-  border-color: var(--primary);
-  background: rgba(74, 143, 212, 0.1);
+  border-color: var(--blue-bright);
+  background: rgba(77,159,255,0.10);
 }
-.radio-option input { accent-color: var(--primary); }
+.radio-option input { accent-color: var(--blue-bright); }
 
 /* ── Plot panel ───────────────────────────────────────────────────────────── */
 .plot-panel { display: flex; flex-direction: column; gap: 1rem; }
 
 .plot-box {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-card);
   padding: 0.75rem;
   position: relative;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 /* ── Metric cards ─────────────────────────────────────────────────────────── */
-.metrics-row {
-  display: grid;
-  gap: 0.75rem;
-}
+.metrics-row { display: grid; gap: 0.75rem; }
 .metrics-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .metrics-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 600px) {
   .metrics-row.cols-3,
   .metrics-row.cols-4 { grid-template-columns: repeat(2, 1fr); }
 }
+
 .metric {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   padding: 0.875rem 1rem;
   text-align: center;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 .metric-label {
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--muted);
   margin-bottom: 0.375rem;
 }
 .metric-value {
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--primary);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--blue-bright);
+  font-family: var(--font-mono);
 }
 .metric-value.good  { color: var(--success); }
-.metric-value.plain { color: var(--text); }
+.metric-value.plain { color: var(--white); }
 
-/* ── Expandable section ───────────────────────────────────────────────────── */
+/* ── Expander ─────────────────────────────────────────────────────────────── */
 .expander {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
   overflow: hidden;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 .expander-head {
   display: flex;
@@ -284,13 +283,13 @@ select:focus {
   font-weight: 600;
   font-size: 0.9375rem;
   user-select: none;
-  transition: background 0.12s;
+  transition: background var(--ease-fast);
 }
-.expander-head:hover { background: var(--card-alt); }
+.expander-head:hover { background: rgba(255,255,255,0.04); }
 .expander-arrow { transition: transform 0.2s; color: var(--muted); }
 .expander-body {
   padding: 1rem 1.25rem 1.25rem;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-border);
   font-size: 0.875rem;
   color: var(--muted);
   line-height: 1.6;
@@ -298,17 +297,37 @@ select:focus {
 .expander-body p { margin-bottom: 0.75rem; }
 .expander-body.hidden { display: none; }
 
-/* ── KaTeX overrides for dark background ─────────────────────────────────── */
-.katex { color: var(--text); }
+/* ── KaTeX ────────────────────────────────────────────────────────────────── */
+.katex { color: var(--white); }
+
+/* ── Button ───────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-block;
+  padding: 0.625rem 1.25rem;
+  background: var(--blue-sky);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background var(--ease-fast), box-shadow var(--ease-fast);
+}
+.btn:hover {
+  background: var(--blue-bright);
+  box-shadow: 0 0 16px rgba(77,159,255,0.35);
+}
 
 /* ── Version stamp ────────────────────────────────────────────────────────── */
 .version-footer {
   position: fixed;
-  bottom: 0.5rem;
-  right: 0.75rem;
+  bottom: 0.5rem; right: 0.75rem;
   font-size: 0.6875rem;
   color: var(--muted);
-  font-family: ui-monospace, monospace;
-  opacity: 0.45;
+  font-family: var(--font-mono);
+  opacity: 0.35;
   pointer-events: none;
+  z-index: 10;
 }
