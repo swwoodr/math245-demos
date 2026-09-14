@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>s-Plane Pole Explorer</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>s-Plane Pole Explorer</h1>
+  <p class="demo-eq">$Y(s) = \dfrac{1}{(s - p_1)(s - p_2)}\quad\longleftrightarrow\quad y(t)$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Presets</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;margin-bottom:0.5rem;">
+        <button class="preset-btn" onclick="setPreset('exp_decay')">Exp. Decay</button>
+        <button class="preset-btn" onclick="setPreset('underdamped')">Underdamped</button>
+        <button class="preset-btn" onclick="setPreset('pure_osc')">Pure Oscillation</button>
+        <button class="preset-btn" onclick="setPreset('overdamped')">Overdamped</button>
+        <button class="preset-btn" onclick="setPreset('resonance')">Resonance</button>
+        <button class="preset-btn" onclick="setPreset('exp_growth')">Exp. Growth</button>
+      </div>
+
+      <div class="ctrl-section">Pole Location</div>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 0.4rem;">Complex poles always appear in conjugate pairs.</p>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Real part σ <span class="ctrl-val" id="sig-v">−1.00</span></div>
+        <input type="range" id="sig-s" min="-4" max="2" step="0.05" value="-1"
+               oninput="sv('sig-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Imag part ω <span class="ctrl-val" id="om-v">2.00</span></div>
+        <input type="range" id="om-s" min="0" max="5" step="0.05" value="2"
+               oninput="sv('om-v',this.value,2); schedule()">
+      </div>
+      <p style="font-size:0.78rem;color:var(--muted);margin:0.2rem 0 0;">ω = 0 → two real poles at s = σ</p>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">10</span></div>
+        <input type="range" id="T-s" min="2" max="30" step="1" value="10"
+               oninput="sv('T-v',this.value,0); schedule()">
+      </div>
+
+      <!-- Pole info -->
+      <div style="margin-top:1rem; padding:0.9rem; background:rgba(255,255,255,0.04); border-radius:8px; font-size:0.82rem; line-height:1.8;" id="pole-info"></div>
+
+      <div style="margin-top:0.75rem; font-size:0.78rem; color:var(--muted); line-height:1.5;">
+        <b>s-plane regions:</b><br>
+        Left half-plane (σ &lt; 0) → stable<br>
+        Right half-plane (σ &gt; 0) → unstable<br>
+        Imaginary axis (σ = 0) → marginally stable<br>
+        Repeated imag. poles → resonance
+      </div>
+    </div>
+
+    <!-- ── Plots ─────────────────────────────────────────────────────────── -->
+    <div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        <div class="plot-box" id="splane-plot" style="height:300px;"></div>
+        <div class="plot-box" id="time-plot" style="height:300px;"></div>
+      </div>
+      <div class="plot-box" id="desc-box" style="margin-top:0.75rem; padding:0.75rem; height:auto; min-height:60px; display:flex;align-items:center;justify-content:center;">
+        <div id="desc-text" style="text-align:center;font-size:0.88rem;color:var(--text);"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<style>
+.preset-btn {
+  padding:0.35rem 0.4rem;
+  background:rgba(255,255,255,0.06);
+  border:1px solid var(--border);
+  border-radius:6px;
+  color:var(--text);
+  cursor:pointer;
+  font-size:0.78rem;
+  transition:background 0.2s;
+}
+.preset-btn:hover { background:rgba(77,159,255,0.15); }
+</style>
+
+<script>
+let scheduledRaf = null;
+function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
+function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
+
+const PRESETS = {
+  exp_decay:    {sig:-1, om:0},
+  underdamped:  {sig:-0.5, om:2},
+  pure_osc:     {sig:0, om:2},
+  overdamped:   {sig:-2, om:0},
+  resonance:    {sig:0, om:2},  // Will be shown with t factor
+  exp_growth:   {sig:0.5, om:1},
+};
+
+function setPreset(name) {
+  const p = PRESETS[name];
+  document.getElementById('sig-s').value=p.sig;
+  document.getElementById('om-s').value=p.om;
+  sv('sig-v',p.sig,2); sv('om-v',p.om,2);
+  schedule();
+}
+
+function build() {
+  const sig=+document.getElementById('sig-s').value;
+  const om=+document.getElementById('om-s').value;
+  const tMax=+document.getElementById('T-s').value;
+
+  const isReal = om < 0.01;
+  // Poles: s = sig ± om*i
+  const p1re=sig, p1im=isReal?0:om;
+  const p2re=sig, p2im=isReal?0:-om;
+
+  // ── s-plane ─────────────────────────────────────────────────────────────────
+  const sRange=Math.max(5, Math.abs(sig)+1, om+1);
+
+  // Shading: left=stable, right=unstable
+  const spTraces=[
+    // Axes
+    {x:[-sRange,sRange],y:[0,0],mode:'lines',line:{color:'rgba(255,255,255,0.2)',width:1},hoverinfo:'skip',showlegend:false},
+    {x:[0,0],y:[-sRange,sRange],mode:'lines',line:{color:'rgba(255,255,255,0.5)',width:2},name:'Imaginary axis',hoverinfo:'skip'},
+    // Imaginary axis label annotation handled via layout
+  ];
+
+  // Grid dots
+  for(let re=-Math.floor(sRange);re<=Math.floor(sRange);re++) {
+    for(let im=-Math.floor(sRange);im<=Math.floor(sRange);im++) {
+      if(re===0&&im===0) continue;
+    }
+  }
+
+  // Poles
+  if (isReal) {
+    spTraces.push({x:[sig],y:[0],mode:'markers',type:'scatter',
+      marker:{color:'#ff6b8a',size:16,symbol:'x',line:{color:'#ff6b8a',width:3}},
+      name:`p = ${sig.toFixed(2)}`,
+      hovertemplate:`s = ${sig.toFixed(2)}<extra>Pole</extra>`});
+  } else {
+    spTraces.push({x:[p1re,p2re],y:[p1im,p2im],mode:'markers',type:'scatter',
+      marker:{color:'#ff6b8a',size:16,symbol:'x',line:{color:'#ff6b8a',width:3}},
+      name:`p = ${sig.toFixed(2)} ± ${om.toFixed(2)}i`,
+      hovertemplate:'s = %{x:.2f} + %{y:.2f}i<extra>Pole</extra>'});
+  }
+
+  const spLayout={
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:10},
+    title:{text:'s-Plane',font:{size:11,color:'#D2E0EE'},x:0.5},
+    margin:{t:35,r:15,b:40,l:45},
+    xaxis:{range:[-sRange,sRange],title:'σ = Re(s)',gridcolor:'rgba(255,255,255,0.06)',zeroline:false},
+    yaxis:{range:[-sRange,sRange],title:'jω = Im(s)',gridcolor:'rgba(255,255,255,0.06)',zeroline:false,scaleanchor:'x'},
+    showlegend:true,legend:{x:0,y:0,font:{size:8}},
+    shapes:[
+      // Left half-plane (stable): faint blue-green
+      {type:'rect',x0:-sRange,x1:0,y0:-sRange,y1:sRange,fillcolor:'rgba(93,228,199,0.06)',line:{width:0}},
+      // Right half-plane (unstable): faint red
+      {type:'rect',x0:0,x1:sRange,y0:-sRange,y1:sRange,fillcolor:'rgba(255,107,138,0.06)',line:{width:0}},
+    ],
+    annotations:[
+      {x:-sRange*0.5,y:sRange*0.85,xref:'x',yref:'y',text:'Stable',font:{color:'rgba(93,228,199,0.6)',size:10},showarrow:false},
+      {x:sRange*0.5,y:sRange*0.85,xref:'x',yref:'y',text:'Unstable',font:{color:'rgba(255,107,138,0.6)',size:10},showarrow:false},
+    ],
+  };
+  Plotly.react('splane-plot',spTraces,spLayout,{responsive:true,displayModeBar:false});
+
+  // ── Time signal y(t) ──────────────────────────────────────────────────────────
+  // Y(s)=1/((s-p1)(s-p2)) → y(t) via partial fractions or formula
+  const Nt=600;
+  const ts=Array.from({length:Nt+1},(_,i)=>tMax*i/Nt);
+  let ys, description, descColor;
+
+  if(isReal) {
+    // Y(s) = 1/(s-σ)² → y(t) = t·e^(σt)
+    ys=ts.map(t=>t*Math.exp(sig*t));
+    if(sig<-0.01){description='Two real repeated poles: y(t) = t·e^{σt} → 0 as t→∞ (decays)';descColor='#5de4c7';}
+    else if(sig>0.01){description='Two real repeated poles: y(t) = t·e^{σt} → ∞ (grows)';descColor='#ff6b8a';}
+    else{description='Two poles on imaginary axis: y(t) = t·sin(0·t) = 0 (degenerate resonance)';descColor='#f0a500';}
+  } else {
+    // Y(s) = 1/((s-σ-jω)(s-σ+jω)) = 1/((s-σ)²+ω²)
+    // → y(t) = (1/ω)·e^(σt)·sin(ωt)
+    ys=ts.map(t=>(1/om)*Math.exp(sig*t)*Math.sin(om*t));
+    if(sig<-0.01){description=`Damped oscillation: y(t) = \\frac{1}{\\omega}e^{\\sigma t}\\sin(\\omega t) \\to 0`;descColor='#5de4c7';}
+    else if(sig>0.01){description='Unstable oscillation: amplitude grows exponentially';descColor='#ff6b8a';}
+    else{description=`Pure oscillation: y(t) = \\frac{1}{\\omega}\\sin(\\omega t)`;descColor='rgba(255,255,255,0.8)';}
+  }
+
+  // Clip for display
+  const yMax=Math.max(...ys.filter(isFinite).map(Math.abs));
+  const clipY=isFinite(yMax)&&yMax>0?Math.min(yMax,yMax*1.1):1;
+
+  const tsTraces=[{x:ts,y:ys.map(y=>Math.max(-clipY,Math.min(clipY,y))),mode:'lines',
+    line:{color:descColor||'#4d9fff',width:2.2},name:'y(t)'}];
+
+  // Envelope
+  if(!isReal&&sig<0){
+    const env=ts.map(t=>(1/om)*Math.exp(sig*t));
+    tsTraces.push({x:ts,y:env,mode:'lines',line:{color:'rgba(240,165,0,0.4)',width:1.2,dash:'dash'},name:'Envelope',hoverinfo:'skip'});
+    tsTraces.push({x:ts,y:env.map(v=>-v),mode:'lines',line:{color:'rgba(240,165,0,0.4)',width:1.2,dash:'dash'},showlegend:false,hoverinfo:'skip'});
+  }
+
+  Plotly.react('time-plot',tsTraces,{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:10},
+    title:{text:'Time Signal y(t)',font:{size:11,color:'#D2E0EE'},x:0.5},
+    margin:{t:35,r:15,b:40,l:55},
+    xaxis:{range:[0,tMax],title:'t',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'y(t)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:8}},
+  },{responsive:true,displayModeBar:false});
+
+  // Info
+  const stability=sig<-0.01?'Stable (LHP)':sig>0.01?'Unstable (RHP)':'Marginally stable (jω-axis)';
+  const stabColor=sig<-0.01?'#5de4c7':sig>0.01?'#ff6b8a':'#f0a500';
+  const poleStr=isReal?`s = ${sig.toFixed(3)} (repeated)`:`s = ${sig.toFixed(3)} ± ${om.toFixed(3)}j`;
+
+  document.getElementById('pole-info').innerHTML=
+    `<b>Poles:</b> ${poleStr}<br>` +
+    `<b>Stability:</b> <span style="color:${stabColor}">${stability}</span><br>` +
+    (isReal?`<b>Signal:</b> t·e<sup>${sig.toFixed(2)}t</sup>`:`<b>Signal:</b> (1/ω)·e<sup>${sig.toFixed(2)}t</sup>·sin(${om.toFixed(2)}t)`);
+
+  document.getElementById('desc-text').style.color=descColor;
+  document.getElementById('desc-text').textContent=description.replace(/\\/g,'').replace(/\{|\}/g,'').replace(/_/g,'');
+}
+
+window.addEventListener('load', build);
+</script>
+</body>
+</html>

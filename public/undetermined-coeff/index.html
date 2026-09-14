@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Undetermined Coefficients</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Method of Undetermined Coefficients</h1>
+  <p class="demo-eq">$ay'' + by' + cy = g(t)$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">ODE: ay&prime;&prime; + by&prime; + cy = g(t)</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">a <span class="ctrl-val" id="a-v">1</span></div>
+        <input type="range" id="a-s" min="1" max="4" step="1" value="1"
+               oninput="sv('a-v',this.value,0); build()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">b <span class="ctrl-val" id="b-v">0</span></div>
+        <input type="range" id="b-s" min="-4" max="8" step="1" value="0"
+               oninput="sv('b-v',this.value,0); build()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">c <span class="ctrl-val" id="c-v">4</span></div>
+        <input type="range" id="c-s" min="-4" max="16" step="1" value="4"
+               oninput="sv('c-v',this.value,0); build()">
+      </div>
+
+      <div class="ctrl-section">Forcing Function g(t)</div>
+      <div class="ctrl-row">
+        <select id="g-type" onchange="build()" style="width:100%;padding:0.4rem 0.5rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:0.9rem;">
+          <option value="poly">Polynomial: P_n(t)</option>
+          <option value="exp">Exponential: e^(αt)</option>
+          <option value="sin">Sinusoidal: sin(βt)</option>
+          <option value="cos">Sinusoidal: cos(βt)</option>
+          <option value="exp_sin">Damped: e^(αt)sin(βt)</option>
+          <option value="exp_cos">Damped: e^(αt)cos(βt)</option>
+          <option value="poly_exp">Product: P_n(t)·e^(αt)</option>
+        </select>
+      </div>
+      <div class="ctrl-row" id="poly-deg-row">
+        <div class="ctrl-label">Degree n <span class="ctrl-val" id="n-v">1</span></div>
+        <input type="range" id="n-s" min="0" max="4" step="1" value="1"
+               oninput="sv('n-v',this.value,0); build()">
+      </div>
+      <div class="ctrl-row" id="alpha-row">
+        <div class="ctrl-label">α (exponential rate) <span class="ctrl-val" id="alpha-v">2.0</span></div>
+        <input type="range" id="alpha-s" min="-4" max="4" step="0.5" value="2"
+               oninput="sv('alpha-v',this.value,1); build()">
+      </div>
+      <div class="ctrl-row" id="beta-row">
+        <div class="ctrl-label">β (frequency) <span class="ctrl-val" id="beta-v">2.0</span></div>
+        <input type="range" id="beta-s" min="0.5" max="6" step="0.5" value="2"
+               oninput="sv('beta-v',this.value,1); build()">
+      </div>
+
+      <!-- Presets -->
+      <div class="ctrl-section">Quick Examples</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:0.3rem;">
+        <button class="ex-btn" onclick="setEx(1,5,6,'exp',0,2,0)">y&prime;&prime;+5y&prime;+6y = e^{2t}</button>
+        <button class="ex-btn" onclick="setEx(1,0,4,'sin',0,0,2)">y&prime;&prime;+4y = sin(2t) ← resonance</button>
+        <button class="ex-btn" onclick="setEx(1,0,9,'sin',0,0,3)">y&prime;&prime;+9y = sin(3t) ← resonance</button>
+        <button class="ex-btn" onclick="setEx(1,4,4,'exp',0,-2,0)">y&prime;&prime;+4y&prime;+4y = e^{-2t}</button>
+        <button class="ex-btn" onclick="setEx(1,0,0,'poly',2,0,0)">y&prime;&prime; = t²</button>
+      </div>
+    </div>
+
+    <!-- ── Result panel ───────────────────────────────────────────────────── -->
+    <div>
+      <!-- Characteristic solution -->
+      <div class="plot-box" style="padding:1.25rem; margin-bottom:0.75rem;">
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.5rem;">Complementary Solution y_c</div>
+        <div id="yc-display" style="font-size:1.1rem;line-height:1.8;"></div>
+        <div id="roots-display" style="font-size:0.82rem;color:var(--muted);margin-top:0.4rem;"></div>
+      </div>
+
+      <!-- Trial particular solution -->
+      <div class="plot-box" style="padding:1.25rem; margin-bottom:0.75rem; border-left:3px solid var(--gold);">
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.5rem;">Trial Particular Solution y_p</div>
+        <div id="yp-trial-display" style="font-size:1.1rem;line-height:1.8;"></div>
+        <div id="modification-display" style="font-size:0.85rem;margin-top:0.5rem;padding:0.5rem;background:rgba(240,165,0,0.1);border-radius:6px;display:none;"></div>
+      </div>
+
+      <!-- Explanation -->
+      <div class="plot-box" style="padding:1.25rem; margin-bottom:0.75rem;">
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:0.5rem;">How to Determine the Form</div>
+        <div id="explanation" style="font-size:0.84rem;line-height:1.8;color:var(--text);"></div>
+      </div>
+
+      <!-- Solution plot -->
+      <div class="plot-box" id="sol-plot" style="height:240px;"></div>
+    </div>
+
+  </div>
+</div>
+<style>
+.ex-btn{padding:0.35rem 0.5rem;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:0.78rem;text-align:left;transition:background 0.2s;}
+.ex-btn:hover{background:rgba(240,165,0,0.12);border-color:var(--gold);}
+</style>
+
+<script>
+function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
+
+function setEx(a,b,c,gtype,n,alpha,beta){
+  document.getElementById('a-s').value=a; sv('a-v',a,0);
+  document.getElementById('b-s').value=b; sv('b-v',b,0);
+  document.getElementById('c-s').value=c; sv('c-v',c,0);
+  document.getElementById('g-type').value=gtype;
+  document.getElementById('n-s').value=n; sv('n-v',n,0);
+  document.getElementById('alpha-s').value=alpha; sv('alpha-v',alpha,1);
+  document.getElementById('beta-s').value=beta; sv('beta-v',beta,1);
+  build();
+}
+
+function charRoots(a,b,c){
+  const disc=b*b-4*a*c;
+  if(Math.abs(disc)<1e-9*(Math.abs(b*b)+Math.abs(4*a*c)+1)){
+    return [{re:-b/(2*a),im:0,repeated:true}];
+  } else if(disc>0){
+    return [{re:(-b+Math.sqrt(disc))/(2*a),im:0},{re:(-b-Math.sqrt(disc))/(2*a),im:0}];
+  } else {
+    return [{re:-b/(2*a),im:Math.sqrt(-disc)/(2*a)},{re:-b/(2*a),im:-Math.sqrt(-disc)/(2*a)}];
+  }
+}
+
+function formatRoot(r,dp=3){
+  if(r.im===0) return r.re.toFixed(dp);
+  return `${r.re.toFixed(dp)} ± ${Math.abs(r.im).toFixed(dp)}i`;
+}
+
+function ycForm(roots){
+  if(roots.length===1&&roots[0].repeated){
+    const r=roots[0].re;
+    const expStr=Math.abs(r)<0.001?'':'e^{'+(r>0?'+':'')+r.toFixed(3)+'t}';
+    return `y_c = (C_1 + C_2 t)${expStr}`;
+  }
+  const r1=roots[0],r2=roots[1];
+  if(r1.im!==0){
+    const alpha=r1.re,beta=Math.abs(r1.im);
+    const eStr=Math.abs(alpha)<0.001?'':'e^{'+(alpha>0?'+':'')+alpha.toFixed(3)+'t}';
+    return `y_c = ${eStr}(C_1 \\cos(${beta.toFixed(3)}t) + C_2 \\sin(${beta.toFixed(3)}t))`;
+  }
+  return `y_c = C_1 e^{${r1.re.toFixed(3)}t} + C_2 e^{${r2.re.toFixed(3)}t}`;
+}
+
+function isRootMatch(roots,alpha,beta){
+  // Check if alpha ± beta*i is already a root
+  for(const r of roots){
+    if(Math.abs(r.re-alpha)<0.001&&Math.abs(r.im-beta)<0.001) return true;
+    if(Math.abs(r.re-alpha)<0.001&&Math.abs(r.im+beta)<0.001) return true;
+  }
+  return false;
+}
+
+function isDoubleRootMatch(roots,alpha,beta){
+  if(roots.length<2)return false;
+  let count=0;
+  for(const r of roots){
+    if(Math.abs(r.re-alpha)<0.001&&Math.abs(Math.abs(r.im)-beta)<0.001) count++;
+  }
+  return count>=2;
+}
+
+function build(){
+  const a=+document.getElementById('a-s').value;
+  const b=+document.getElementById('b-s').value;
+  const c=+document.getElementById('c-s').value;
+  const gtype=document.getElementById('g-type').value;
+  const n=+document.getElementById('n-s').value;
+  const alpha=+document.getElementById('alpha-s').value;
+  const beta_=+document.getElementById('beta-s').value;
+
+  // Show/hide param rows
+  const showAlpha=['exp','exp_sin','exp_cos','poly_exp'].includes(gtype);
+  const showBeta=['sin','cos','exp_sin','exp_cos'].includes(gtype);
+  const showN=['poly','poly_exp'].includes(gtype);
+  document.getElementById('alpha-row').style.display=showAlpha?'block':'none';
+  document.getElementById('beta-row').style.display=showBeta?'block':'none';
+  document.getElementById('poly-deg-row').style.display=showN?'block':'none';
+
+  const roots=charRoots(a,b,c);
+
+  // --- Complementary solution ---
+  const ycStr=ycForm(roots);
+  let rootStr='Characteristic roots: ';
+  if(roots[0]&&roots[0].repeated) rootStr+=`r = ${roots[0].re.toFixed(3)} (repeated, Δ=0)`;
+  else rootStr+=roots.map(r=>formatRoot(r)).join(', ')+' (Δ '+(roots[0].im!==0?'< 0':'> 0')+')';
+
+  document.getElementById('yc-display').innerHTML=`$${ycStr}$`;
+  document.getElementById('roots-display').textContent=rootStr;
+
+  // --- Trial y_p: determine form + check modification rule ---
+  let trialBase='', modNeeded=0, explanation='';
+
+  // Determine alpha_g and beta_g for the forcing
+  let alpha_g=0, beta_g=0;
+  switch(gtype){
+    case 'poly':    alpha_g=0; beta_g=0; break;
+    case 'exp':     alpha_g=alpha; beta_g=0; break;
+    case 'sin':     alpha_g=0; beta_g=beta_; break;
+    case 'cos':     alpha_g=0; beta_g=beta_; break;
+    case 'exp_sin': alpha_g=alpha; beta_g=beta_; break;
+    case 'exp_cos': alpha_g=alpha; beta_g=beta_; break;
+    case 'poly_exp':alpha_g=alpha; beta_g=0; break;
+  }
+
+  // Check modification (how many times alpha_g±i*beta_g is a root)
+  const match1=isRootMatch(roots,alpha_g,beta_g);
+  const match2=isDoubleRootMatch(roots,alpha_g,beta_g);
+  if(match2) modNeeded=2;
+  else if(match1) modNeeded=1;
+
+  const polyPart=(deg)=>{
+    if(deg===0)return 'A';
+    return 'A_0 t^{'+deg+'} + \\cdots + A_{'+deg+'}';
+  };
+  const tMod=(m)=>m===0?'':m===1?'t \\cdot ':'t^2 \\cdot ';
+
+  switch(gtype){
+    case 'poly':
+      trialBase=`${tMod(modNeeded)}(${polyPart(n)})`;
+      explanation=`Forcing is a degree-${n} polynomial.<br>Standard trial: $(${polyPart(n)})$. No exponential, so look at α=0, β=0.<br>Check if r=0 is a characteristic root.`;
+      break;
+    case 'exp':
+      trialBase=`${tMod(modNeeded)}A e^{${alpha>0?'+':''}${alpha}t}`;
+      explanation=`Forcing is $e^{${alpha}t}$ (α=${alpha}, β=0).<br>Standard trial: $Ae^{${alpha}t}$.`;
+      break;
+    case 'sin':
+      trialBase=`${tMod(modNeeded)}(A\\cos(${beta_}t)+B\\sin(${beta_}t))`;
+      explanation=`Forcing is $\\sin(${beta_}t)$ (α=0, β=${beta_}).<br>Always pair with cosine: trial needs both sin and cos terms.`;
+      break;
+    case 'cos':
+      trialBase=`${tMod(modNeeded)}(A\\cos(${beta_}t)+B\\sin(${beta_}t))`;
+      explanation=`Forcing is $\\cos(${beta_}t)$ (α=0, β=${beta_}).<br>Always pair with sine: trial needs both sin and cos terms.`;
+      break;
+    case 'exp_sin':
+    case 'exp_cos':
+      trialBase=`${tMod(modNeeded)}e^{${alpha}t}(A\\cos(${beta_}t)+B\\sin(${beta_}t))`;
+      explanation=`Forcing is $e^{${alpha}t}(\\sin/\\cos)(${beta_}t)$ (α=${alpha}, β=${beta_}).<br>Trial combines exponential envelope with sinusoidal pair.`;
+      break;
+    case 'poly_exp':
+      trialBase=`${tMod(modNeeded)}e^{${alpha}t}(${polyPart(n)})`;
+      explanation=`Forcing is $t^${n}e^{${alpha}t}$ (α=${alpha}, β=0).<br>Multiply the standard polynomial trial by the exponential.`;
+      break;
+  }
+
+  // Modification rule
+  const modBox=document.getElementById('modification-display');
+  if(modNeeded>0){
+    const modMsg=modNeeded===1
+      ?`<span style="color:#f0a500;">⚠ Modification Rule (×t):</span> The forcing function's characteristic pair <b>${alpha_g}${beta_g>0?'±'+beta_g+'i':''}</b> is ALREADY a root of the characteristic equation. Multiply the standard trial by $t$.`
+      :`<span style="color:#f0a500;">⚠ Modification Rule (×t²):</span> The characteristic pair is a <b>repeated root</b>. Multiply by $t^2$.`;
+    modBox.innerHTML=modMsg;
+    modBox.style.display='block';
+    if(window.renderMathInElement) renderMathInElement(modBox);
+  } else {
+    modBox.style.display='none';
+  }
+
+  document.getElementById('yp-trial-display').innerHTML=`$y_p = ${trialBase}$`;
+  document.getElementById('explanation').innerHTML=explanation;
+
+  // Render math
+  ['yc-display','yp-trial-display','explanation'].forEach(id=>{
+    if(window.renderMathInElement) renderMathInElement(document.getElementById(id));
+  });
+
+  // --- Numeric solution plot ---
+  const rk4=(f,t,y,yp,h)=>{
+    const k1y=yp,k1yp=f(t,y,yp);
+    const k2y=yp+h/2*k1yp,k2yp=f(t+h/2,y+h/2*k1y,yp+h/2*k1yp);
+    const k3y=yp+h/2*k2yp,k3yp=f(t+h/2,y+h/2*k2y,yp+h/2*k2yp);
+    const k4y=yp+h*k3yp,k4yp=f(t+h,y+h*k3y,yp+h*k3yp);
+    return [y+h/6*(k1y+2*k2y+2*k3y+k4y),yp+h/6*(k1yp+2*k2yp+2*k3yp+k4yp)];
+  };
+
+  const gFn=t=>{
+    switch(gtype){
+      case 'poly':     return Math.pow(t,n);
+      case 'exp':      return Math.exp(alpha*t);
+      case 'sin':      return Math.sin(beta_*t);
+      case 'cos':      return Math.cos(beta_*t);
+      case 'exp_sin':  return Math.exp(alpha*t)*Math.sin(beta_*t);
+      case 'exp_cos':  return Math.exp(alpha*t)*Math.cos(beta_*t);
+      case 'poly_exp': return Math.pow(t,n)*Math.exp(alpha*t);
+    }
+  };
+
+  const h=0.01,tMax=10,Nt=Math.round(tMax/h);
+  const ts=[0],ys=[0];
+  let y=0,yp=1;
+  const F=(t,_y,_yp)=>(gFn(t)-b*_yp-c*_y)/a;
+  for(let i=0;i<Nt;i++){
+    const t=i*h;
+    [y,yp]=rk4(F,t,y,yp,h);
+    ts.push(t+h); ys.push(isFinite(y)?Math.max(-30,Math.min(30,y)):NaN);
+  }
+
+  Plotly.react('sol-plot',[{x:ts,y:ys,mode:'lines',line:{color:'#4d9fff',width:2},name:'y(t), y(0)=0, y\'(0)=1'}],{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:40,l:55},
+    xaxis:{range:[0,tMax],title:'t',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'y(t)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+  },{responsive:true,displayModeBar:false});
+}
+
+window.addEventListener('load', build);
+</script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIR Epidemic Model</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>SIR Epidemic Model</h1>
+  <p class="demo-eq">$\dot S = -\beta SI,\quad \dot I = \beta SI - \gamma I,\quad \dot R = \gamma I$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Model</div>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="model" value="sir" checked onchange="schedule()">
+          SIR — no reinfection
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="model" value="sirs" onchange="schedule()">
+          SIRS — reinfection at rate ω
+        </label>
+      </div>
+
+      <div class="ctrl-section">Disease Parameters</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Transmission β <span class="ctrl-val" id="beta-v">0.30</span></div>
+        <input type="range" id="beta-s" min="0.01" max="1.0" step="0.01" value="0.3"
+               oninput="sv('beta-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Recovery γ <span class="ctrl-val" id="gamma-v">0.10</span></div>
+        <input type="range" id="gamma-s" min="0.01" max="1.0" step="0.01" value="0.1"
+               oninput="sv('gamma-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row" id="omega-row" style="display:none;">
+        <div class="ctrl-label">Reinfection ω <span class="ctrl-val" id="omega-v">0.01</span></div>
+        <input type="range" id="omega-s" min="0.001" max="0.2" step="0.001" value="0.01"
+               oninput="sv('omega-v',this.value,3); schedule()">
+      </div>
+
+      <div class="ctrl-section">Initial Conditions</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Population N <span class="ctrl-val" id="N-v">1000</span></div>
+        <input type="range" id="N-s" min="100" max="10000" step="100" value="1000"
+               oninput="sv('N-v',this.value,0); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Initial infected I₀ <span class="ctrl-val" id="I0-v">10</span></div>
+        <input type="range" id="I0-s" min="1" max="200" step="1" value="10"
+               oninput="sv('I0-v',this.value,0); schedule()">
+      </div>
+
+      <div class="ctrl-section">Intervention</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Vaccination v% <span class="ctrl-val" id="vax-v">0</span>%</div>
+        <input type="range" id="vax-s" min="0" max="95" step="1" value="0"
+               oninput="sv('vax-v',this.value,0); schedule()">
+      </div>
+      <p style="font-size:0.78rem;color:var(--muted);margin:0.2rem 0 0.5rem;">Vaccination moves a fraction of S₀ → R₀.</p>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">200</span></div>
+        <input type="range" id="T-s" min="30" max="500" step="10" value="200"
+               oninput="sv('T-v',this.value,0); schedule()">
+      </div>
+
+      <!-- R₀ gauge -->
+      <div style="margin-top:1rem; padding:0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; text-align:center;">
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.25rem;">Basic reproduction number</div>
+        <div id="r0-display" style="font-size:2rem;font-weight:700;font-family:var(--font-heading);"></div>
+        <div id="r0-label" style="font-size:0.78rem;margin-top:0.25rem;"></div>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;">$\mathcal{R}_0 = \beta S_0 / \gamma$</div>
+      </div>
+
+      <div class="metric-row" style="margin-top:0.75rem;">
+        <div class="metric"><div class="metric-value" id="peak-I">—</div><div class="metric-label">Peak infected</div></div>
+        <div class="metric"><div class="metric-value" id="peak-t">—</div><div class="metric-label">Time to peak</div></div>
+        <div class="metric"><div class="metric-value" id="total-R">—</div><div class="metric-label">Total infected</div></div>
+      </div>
+    </div>
+
+    <!-- ── Plots ─────────────────────────────────────────────────────────── -->
+    <div>
+      <div class="plot-box" id="ts-plot" style="height:300px;"></div>
+      <div class="plot-box" id="phase-plot" style="height:220px; margin-top:0.75rem;"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let scheduledRaf = null;
+function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
+function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
+
+document.querySelector('input[name="model"][value="sirs"]').addEventListener('change',()=>{
+  document.getElementById('omega-row').style.display='block'; schedule();
+});
+document.querySelector('input[name="model"][value="sir"]').addEventListener('change',()=>{
+  document.getElementById('omega-row').style.display='none'; schedule();
+});
+
+function rk4(F, t, state, h) {
+  const k1=F(t,state), k2=F(t+h/2,state.map((s,i)=>s+h/2*k1[i]));
+  const k3=F(t+h/2,state.map((s,i)=>s+h/2*k2[i])), k4=F(t+h,state.map((s,i)=>s+h*k3[i]));
+  return state.map((s,i)=>s+h/6*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+}
+
+function build() {
+  const beta=+document.getElementById('beta-s').value;
+  const gamma=+document.getElementById('gamma-s').value;
+  const omega=+document.getElementById('omega-s').value;
+  const N=+document.getElementById('N-s').value;
+  const I0=+document.getElementById('I0-s').value;
+  const vax=+document.getElementById('vax-s').value/100;
+  const tMax=+document.getElementById('T-s').value;
+  const isSIRS=document.querySelector('input[name="model"]:checked').value==='sirs';
+
+  const S0=N*(1-vax)-I0, R0_ic=N*vax;
+  const R0=beta*S0/gamma;
+
+  // R₀ display
+  const r0El=document.getElementById('r0-display');
+  const r0Lab=document.getElementById('r0-label');
+  r0El.textContent=R0.toFixed(2);
+  if(R0>1){r0El.style.color='#ff6b8a';r0Lab.textContent='Epidemic spreads (R₀>1)';r0Lab.style.color='#ff6b8a';}
+  else{r0El.style.color='#5de4c7';r0Lab.textContent='No epidemic (R₀≤1)';r0Lab.style.color='#5de4c7';}
+
+  const F = isSIRS
+    ? (t,[S,I,R])=>[-beta*S*I/N, beta*S*I/N-gamma*I, gamma*I-omega*R]
+    : (t,[S,I,R])=>[-beta*S*I/N, beta*S*I/N-gamma*I, gamma*I];
+
+  const h=0.1;
+  const Ss=[S0],Is=[I0],Rs=[R0_ic],ts=[0];
+  let state=[S0,I0,R0_ic];
+  for(let t=0;t<tMax;t+=h){
+    state=rk4(F,t,state,h);
+    Ss.push(Math.max(0,state[0]));
+    Is.push(Math.max(0,state[1]));
+    Rs.push(Math.max(0,state[2]));
+    ts.push(t+h);
+  }
+
+  const peakI=Math.max(...Is), peakIdx=Is.indexOf(peakI);
+  const peakT=ts[peakIdx];
+  const totalR=Rs[Rs.length-1];
+
+  document.getElementById('peak-I').textContent=Math.round(peakI).toLocaleString();
+  document.getElementById('peak-t').textContent=peakT.toFixed(1);
+  document.getElementById('total-R').textContent=Math.round(totalR).toLocaleString();
+
+  // Herd immunity threshold
+  const herd=(1-1/Math.max(R0,0.001))*N;
+
+  // ── Time series ─────────────────────────────────────────────────────────────
+  const tsTraces=[
+    {x:ts,y:Ss,mode:'lines',line:{color:'#4d9fff',width:2.2},name:'S (Susceptible)'},
+    {x:ts,y:Is,mode:'lines',line:{color:'#ff6b8a',width:2.2},name:'I (Infectious)'},
+    {x:ts,y:Rs,mode:'lines',line:{color:'#5de4c7',width:2.2},name:'R (Recovered)'},
+    {x:[0,tMax],y:[peakI,peakI],mode:'lines',line:{color:'rgba(255,107,138,0.3)',width:1,dash:'dot'},hoverinfo:'skip',showlegend:false},
+    {x:[0,tMax],y:[herd,herd],mode:'lines',line:{color:'rgba(240,165,0,0.3)',width:1,dash:'dash'},name:'Herd immunity S*',hoverinfo:'skip'},
+  ];
+  Plotly.react('ts-plot',tsTraces,{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:40,l:60},
+    xaxis:{range:[0,tMax],title:'t (days)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{range:[0,N],title:'Individuals',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+  },{responsive:true,displayModeBar:false});
+
+  // ── Phase portrait in S-I plane ─────────────────────────────────────────────
+  const phTraces=[
+    {x:Ss,y:Is,mode:'lines',line:{color:'#b57ff5',width:2},name:'Trajectory'},
+    {x:[S0],[y]:[I0],mode:'markers',marker:{color:'#f0a500',size:9},name:`IC (${Math.round(S0)},${I0})`},
+    {x:[Ss[Ss.length-1]],y:[Is[Is.length-1]],mode:'markers',marker:{color:'#5de4c7',size:9,symbol:'square'},name:'End state',showlegend:false},
+  ];
+  Plotly.react('phase-plot',phTraces,{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:40,l:60},
+    xaxis:{range:[0,N],title:'S (Susceptible)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'I (Infectious)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+  },{responsive:true,displayModeBar:false});
+}
+
+window.addEventListener('load', build);
+</script>
+</body>
+</html>

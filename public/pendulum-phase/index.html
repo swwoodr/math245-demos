@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pendulum Phase Plane</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Pendulum Phase Plane</h1>
+  <p class="demo-eq">$\theta'' + \dfrac{b}{mL}\,\theta' + \dfrac{g}{L}\sin\theta = 0$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Pendulum Parameters</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Length L (m) <span class="ctrl-val" id="L-v">1.00</span></div>
+        <input type="range" id="L-s" min="0.2" max="3" step="0.1" value="1"
+               oninput="sv('L-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Damping b <span class="ctrl-val" id="b-v">0.00</span></div>
+        <input type="range" id="b-s" min="0" max="2" step="0.05" value="0"
+               oninput="sv('b-v',this.value,2); schedule()">
+      </div>
+
+      <div class="ctrl-section">Initial Condition</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">θ(0) (rad) <span class="ctrl-val" id="th0-v">1.57</span></div>
+        <input type="range" id="th0-s" min="-6.28" max="6.28" step="0.05" value="1.5708"
+               oninput="sv('th0-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">θ'(0) (rad/s) <span class="ctrl-val" id="w0-v">0.00</span></div>
+        <input type="range" id="w0-s" min="-6" max="6" step="0.1" value="0"
+               oninput="sv('w0-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">20</span></div>
+        <input type="range" id="T-s" min="5" max="60" step="1" value="20"
+               oninput="sv('T-v',this.value,0); schedule()">
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-lin" onchange="schedule()">
+          Overlay linearized portrait (θ'' + (g/L)θ = 0)
+        </label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-multi" onchange="schedule()" checked>
+          Show multiple orbits
+        </label>
+      </div>
+
+      <div style="margin-top:1rem; padding:0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; font-size:0.82rem; color:var(--muted);" id="motion-display"></div>
+    </div>
+
+    <!-- ── Plots ─────────────────────────────────────────────────────────── -->
+    <div>
+      <div class="plot-box" id="phase-plot" style="height:380px;"></div>
+      <div class="plot-box" id="time-plot" style="height:200px; margin-top:0.75rem;"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const g = 9.81;
+let scheduledRaf = null;
+function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
+function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
+
+function rk4(F, t, state, h) {
+  const k1=F(t,state), k2=F(t+h/2,state.map((s,i)=>s+h/2*k1[i]));
+  const k3=F(t+h/2,state.map((s,i)=>s+h/2*k2[i])), k4=F(t+h,state.map((s,i)=>s+h*k3[i]));
+  return state.map((s,i)=>s+h/6*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+}
+
+function solve(L, b, m, th0, w0, tMax) {
+  const h=0.02;
+  const ths=[th0],ws=[w0],ts=[0];
+  let state=[th0,w0];
+  const F=(_t,[th,w])=>[w, -b/(m*L)*w - g/L*Math.sin(th)];
+  for(let t=0;t<tMax;t+=h){
+    state=rk4(F,t,state,h);
+    ths.push(state[0]); ws.push(state[1]); ts.push(t+h);
+  }
+  return {ths,ws,ts};
+}
+
+function build() {
+  const L=+document.getElementById('L-s').value;
+  const b=+document.getElementById('b-s').value;
+  const th0=+document.getElementById('th0-s').value;
+  const w0=+document.getElementById('w0-s').value;
+  const tMax=+document.getElementById('T-s').value;
+  const showLin=document.getElementById('show-lin').checked;
+  const showMulti=document.getElementById('show-multi').checked;
+  const m=1;
+
+  const {ths,ws,ts} = solve(L,b,m,th0,w0,tMax);
+
+  // Separatrix energy: E_sep = 2*g/L (the energy at the unstable equilibrium θ=π)
+  const E_sep = 2*g/L;
+
+  // Phase portrait traces
+  const phTraces = [];
+
+  // Separatrix (b=0 only)
+  if (b < 0.01) {
+    // For undamped pendulum, separatrix is where (1/2)w² + (g/L)(1-cos θ) = 2g/L
+    // → w = ±√(2g/L(1+cos θ)) = ±2√(g/L)·|cos(θ/2)|
+    const sepTh = [], sepWp = [], sepWm = [];
+    for(let i=-400;i<=400;i++){
+      const th=i*Math.PI/200; // ±2π
+      const w2=2*(g/L)*(1+Math.cos(th));
+      if(w2>=0){
+        sepTh.push(th); sepWp.push(Math.sqrt(w2)); sepWm.push(-Math.sqrt(w2));
+      }
+    }
+    phTraces.push({x:sepTh,y:sepWp,mode:'lines',line:{color:'#f0a500',width:2,dash:'dash'},name:'Separatrix',hoverinfo:'skip'});
+    phTraces.push({x:sepTh,y:sepWm,mode:'lines',line:{color:'#f0a500',width:2,dash:'dash'},showlegend:false,hoverinfo:'skip'});
+  }
+
+  // Multiple orbits (undamped, sampled ICs)
+  if (showMulti && b < 0.05) {
+    const multiAngles = [0.5,1.0,1.5,2.0,2.5,3.0,3.5];
+    for(const th_ic of multiAngles){
+      const {ths:mths,ws:mws}=solve(L,0,m,th_ic,0,tMax*3);
+      phTraces.push({x:mths,y:mws,mode:'lines',line:{color:'rgba(77,159,255,0.25)',width:1},hoverinfo:'skip',showlegend:false});
+    }
+    // Rotation orbit
+    const {ths:rths,ws:rws}=solve(L,0,m,0,5,tMax*2);
+    phTraces.push({x:rths,y:rws,mode:'lines',line:{color:'rgba(93,228,199,0.25)',width:1},hoverinfo:'skip',showlegend:false});
+  }
+
+  // Linearized portrait overlay
+  if (showLin) {
+    const omega0=Math.sqrt(g/L);
+    // Ellipses: w²/omega0² + th² = const
+    const ellipseAngles=[0.5,1.0,1.5,2.0];
+    for(const thMax of ellipseAngles){
+      const eth=[],ew=[];
+      for(let i=0;i<=360;i++){
+        const angle=i*2*Math.PI/360;
+        eth.push(thMax*Math.cos(angle));
+        ew.push(thMax*omega0*Math.sin(angle));
+      }
+      phTraces.push({x:eth,y:ew,mode:'lines',line:{color:'rgba(255,100,150,0.3)',width:1,dash:'dot'},hoverinfo:'skip',showlegend:false});
+    }
+  }
+
+  // Main trajectory
+  phTraces.push({x:ths,y:ws,mode:'lines',line:{color:'#4d9fff',width:2.2},name:'θ(t), ω(t)'});
+  phTraces.push({x:[th0],y:[w0],mode:'markers',marker:{color:'#f0a500',size:9,symbol:'circle'},name:`IC (${th0.toFixed(2)},${w0.toFixed(2)})`,showlegend:false});
+
+  // Equilibria: θ=nπ, ω=0
+  for(let n=-2;n<=2;n++){
+    const eq_th=n*Math.PI;
+    const isStable=(n%2===0);
+    phTraces.push({x:[eq_th],y:[0],mode:'markers',
+      marker:{color:isStable?'#5de4c7':'#ff6b8a',size:10,symbol:isStable?'circle':'circle-open',line:{color:'white',width:1.5}},
+      name:isStable?`Stable (θ=${n===0?'0':'±π'})`:undefined,
+      showlegend:isStable&&n===0,
+      hovertemplate:`θ=${eq_th.toFixed(2)}, ω=0<br>${isStable?'Stable center':'Unstable saddle'}<extra></extra>`});
+  }
+
+  const thRange=Math.max(Math.abs(th0)+0.5, 4.5);
+  Plotly.react('phase-plot', phTraces, {
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:45,l:55},
+    xaxis:{range:[-thRange,thRange],title:'θ (rad)',gridcolor:'rgba(255,255,255,0.06)',zerolinecolor:'rgba(255,255,255,0.18)',
+      tickvals:[-2*Math.PI,-Math.PI,0,Math.PI,2*Math.PI],
+      ticktext:['-2π','-π','0','π','2π']},
+    yaxis:{title:'ω = θ\' (rad/s)',gridcolor:'rgba(255,255,255,0.06)',zerolinecolor:'rgba(255,255,255,0.18)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+    annotations:[{x:0,y:0,xref:'x',yref:'y',text:b<0.01?'Centers':'Spirals',font:{color:'#5de4c7',size:9},showarrow:false,xshift:15}],
+  },{responsive:true,displayModeBar:false});
+
+  // Time series
+  Plotly.react('time-plot',[
+    {x:ts,y:ths,mode:'lines',line:{color:'#4d9fff',width:2},name:'θ(t)'},
+  ],{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:40,l:55},
+    xaxis:{range:[0,tMax],title:'t (s)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'θ (rad)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:false,
+  },{responsive:true,displayModeBar:false});
+
+  // Classify motion
+  const E = 0.5*w0*w0 + (g/L)*(1-Math.cos(th0));
+  let motionType;
+  if(b>0.01) motionType='Damped oscillation — trajectory spirals to θ=0';
+  else if(E < E_sep*0.999) motionType='Oscillation — closed orbit inside the separatrix';
+  else if(E > E_sep*1.001) motionType='Full rotation — orbit outside the separatrix';
+  else motionType='Near separatrix — approaches the unstable equilibrium';
+
+  document.getElementById('motion-display').innerHTML =
+    `<b>Energy:</b> E = ${E.toFixed(3)}<br><b>E_sep</b> = ${E_sep.toFixed(3)}<br><b>Motion:</b> ${motionType}`;
+}
+
+window.addEventListener('load', build);
+</script>
+</body>
+</html>

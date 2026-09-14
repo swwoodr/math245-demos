@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Heaviside &amp; Piecewise Forcing</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Heaviside &amp; Piecewise Forcing</h1>
+  <p class="demo-eq">$y'' + ay' + by = g(t)$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Scenarios</div>
+      <div class="ctrl-row">
+        <select id="scenario-sel" onchange="loadScenario()" style="width:100%;padding:0.4rem 0.5rem;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:0.9rem;">
+          <option value="custom">— custom —</option>
+          <option value="on_off">Force on, then off</option>
+          <option value="pulse">Short pulse (on then off)</option>
+          <option value="impulse">Impulse (Dirac δ approximation)</option>
+          <option value="resonance">Near-resonance burst</option>
+          <option value="ramp">Ramp input (integrator)</option>
+        </select>
+      </div>
+
+      <div class="ctrl-section">ODE Parameters</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Damping a <span class="ctrl-val" id="a-v">0.50</span></div>
+        <input type="range" id="a-s" min="0" max="4" step="0.05" value="0.5"
+               oninput="sv('a-v',this.value,2); setCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Stiffness b <span class="ctrl-val" id="b-v">4.00</span></div>
+        <input type="range" id="b-s" min="0" max="16" step="0.1" value="4"
+               oninput="sv('b-v',this.value,2); setCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">y(0) <span class="ctrl-val" id="y0-v">0.00</span></div>
+        <input type="range" id="y0-s" min="-3" max="3" step="0.1" value="0"
+               oninput="sv('y0-v',this.value,2); setCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">y'(0) <span class="ctrl-val" id="yp0-v">0.00</span></div>
+        <input type="range" id="yp0-s" min="-5" max="5" step="0.1" value="0"
+               oninput="sv('yp0-v',this.value,2); setCustom(); schedule()">
+      </div>
+
+      <div class="ctrl-section">Forcing g(t)</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Turn-on time t₁ <span class="ctrl-val" id="t1-v">2.00</span></div>
+        <input type="range" id="t1-s" min="0" max="15" step="0.25" value="2"
+               oninput="sv('t1-v',this.value,2); setCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Amplitude F₁ <span class="ctrl-val" id="F1-v">1.00</span></div>
+        <input type="range" id="F1-s" min="-5" max="5" step="0.1" value="1"
+               oninput="sv('F1-v',this.value,2); setCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="use-t2" onchange="setCustom(); schedule()" checked>
+          Add turn-off at t₂
+        </label>
+      </div>
+      <div class="ctrl-row" id="t2-row">
+        <div class="ctrl-label">Turn-off t₂ <span class="ctrl-val" id="t2-v">8.00</span></div>
+        <input type="range" id="t2-s" min="0" max="20" step="0.25" value="8"
+               oninput="sv('t2-v',this.value,2); setCustom(); schedule()">
+      </div>
+
+      <div class="ctrl-section">Impulse (Dirac δ)</div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="use-impulse" onchange="setCustom(); schedule()">
+          Add impulse at t₃
+        </label>
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Impulse time t₃ <span class="ctrl-val" id="t3-v">10.00</span></div>
+        <input type="range" id="t3-s" min="0" max="20" step="0.25" value="10"
+               oninput="sv('t3-v',this.value,2); setCustom(); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Impulse magnitude <span class="ctrl-val" id="Fd-v">3.00</span></div>
+        <input type="range" id="Fd-s" min="-10" max="10" step="0.5" value="3"
+               oninput="sv('Fd-v',this.value,2); setCustom(); schedule()">
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">20</span></div>
+        <input type="range" id="T-s" min="5" max="40" step="1" value="20"
+               oninput="sv('T-v',this.value,0); setCustom(); schedule()">
+      </div>
+    </div>
+
+    <!-- ── Plots ─────────────────────────────────────────────────────────── -->
+    <div>
+      <div class="plot-box" id="forcing-plot" style="height:180px;"></div>
+      <div class="plot-box" id="sol-plot" style="height:300px; margin-top:0.75rem;"></div>
+      <div id="laplace-box" style="margin-top:0.75rem; padding:0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; font-size:0.82rem; color:var(--muted);">
+        <div id="laplace-text"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let scheduledRaf=null;
+function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
+function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
+function setCustom(){document.getElementById('scenario-sel').value='custom';}
+
+document.getElementById('use-t2').addEventListener('change',function(){
+  document.getElementById('t2-row').style.display=this.checked?'block':'none';
+});
+
+const SCENARIOS = {
+  on_off: {a:0.5,b:4,y0:0,yp0:0,t1:2,F1:1,useT2:true,t2:12,useImpulse:false,t3:15,Fd:3,T:20},
+  pulse: {a:0.3,b:9,y0:0,yp0:0,t1:2,F1:5,useT2:true,t2:4,useImpulse:false,t3:10,Fd:3,T:20},
+  impulse: {a:0.4,b:4,y0:0,yp0:0,t1:0,F1:0,useT2:false,t2:8,useImpulse:true,t3:5,Fd:8,T:20},
+  resonance: {a:0.1,b:4,y0:0,yp0:0,t1:1,F1:1,useT2:true,t2:15,useImpulse:false,t3:10,Fd:3,T:20},
+  ramp: {a:1,b:0,y0:0,yp0:0,t1:2,F1:1,useT2:false,t2:8,useImpulse:false,t3:10,Fd:3,T:15},
+};
+
+function loadScenario(){
+  const s=document.getElementById('scenario-sel').value;
+  if(s==='custom')return;
+  const p=SCENARIOS[s];
+  const set=(id,val)=>{document.getElementById(id+'-s').value=val;};
+  set('a',p.a);set('b',p.b);set('y0',p.y0);set('yp0',p.yp0);
+  set('t1',p.t1);set('F1',p.F1);set('t2',p.t2);set('t3',p.t3);set('Fd',p.Fd);set('T',p.T);
+  document.getElementById('use-t2').checked=p.useT2;
+  document.getElementById('use-impulse').checked=p.useImpulse;
+  document.getElementById('t2-row').style.display=p.useT2?'block':'none';
+  ['a','b','y0','yp0','t1','F1','t2','t3','Fd','T'].forEach(id=>{
+    const el=document.getElementById(id+'-s');
+    sv(id+'-v',el.value,id==='T'?0:2);
+  });
+  schedule();
+}
+
+// ── RK4 ──────────────────────────────────────────────────────────────────────
+function rk4(a,b,g,t,y,yp,h){
+  const f=(t,y,yp)=>g(t)-a*yp-b*y;
+  const k1y=yp, k1yp=f(t,y,yp);
+  const k2y=yp+h/2*k1yp, k2yp=f(t+h/2,y+h/2*k1y,yp+h/2*k1yp);
+  const k3y=yp+h/2*k2yp, k3yp=f(t+h/2,y+h/2*k2y,yp+h/2*k2yp);
+  const k4y=yp+h*k3yp, k4yp=f(t+h,y+h*k3y,yp+h*k3yp);
+  return [y+h/6*(k1y+2*k2y+2*k3y+k4y), yp+h/6*(k1yp+2*k2yp+2*k3yp+k4yp)];
+}
+
+function build(){
+  const a=+document.getElementById('a-s').value;
+  const b=+document.getElementById('b-s').value;
+  const y0=+document.getElementById('y0-s').value;
+  const yp0=+document.getElementById('yp0-s').value;
+  const t1=+document.getElementById('t1-s').value;
+  const F1=+document.getElementById('F1-s').value;
+  const useT2=document.getElementById('use-t2').checked;
+  const t2=+document.getElementById('t2-s').value;
+  const useImpulse=document.getElementById('use-impulse').checked;
+  const t3=+document.getElementById('t3-s').value;
+  const Fd=+document.getElementById('Fd-s').value;
+  const tMax=+document.getElementById('T-s').value;
+
+  // Impulse approximated as tall narrow rectangle of width ε=0.01
+  const eps=0.05;
+
+  const g=t=>{
+    let val=0;
+    if(t>=t1) val+=F1;
+    if(useT2&&t>=t2) val-=F1;
+    if(useImpulse&&t>=t3&&t<t3+eps) val+=Fd/eps;
+    return val;
+  };
+
+  // Solve
+  const h=0.01;
+  const Nt=Math.round(tMax/h);
+  const ts=[0],ys=[y0],gts=[g(0)];
+  let y=y0,yp=yp0;
+  for(let i=0;i<Nt;i++){
+    const t=i*h;
+    [y,yp]=rk4(a,b,g,t,y,yp,h);
+    ts.push(t+h); ys.push(isFinite(y)?y:NaN); gts.push(g(t+h));
+  }
+
+  // ── Forcing plot ─────────────────────────────────────────────────────────────
+  const switchTimes=[];
+  if(t1>=0&&t1<=tMax)switchTimes.push({t:t1,label:`t₁=${t1}`});
+  if(useT2&&t2>=0&&t2<=tMax)switchTimes.push({t:t2,label:`t₂=${t2}`});
+  if(useImpulse&&t3>=0&&t3<=tMax)switchTimes.push({t:t3,label:`t₃=${t3} (δ)`});
+
+  const fTraces=[{x:ts,y:gts,mode:'lines',line:{color:'#f0a500',width:2},name:'g(t)'}];
+  const fAnnotations=switchTimes.map(sw=>({
+    x:sw.t,y:0,xref:'x',yref:'y',
+    text:sw.label,font:{color:'rgba(240,165,0,0.7)',size:9},
+    showarrow:true,arrowhead:3,arrowcolor:'rgba(240,165,0,0.5)',arrowsize:0.7,ax:0,ay:-25,
+  }));
+
+  Plotly.react('forcing-plot',fTraces,{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:10},
+    margin:{t:5,r:15,b:30,l:50},
+    xaxis:{range:[0,tMax],gridcolor:'rgba(255,255,255,0.06)',title:''},
+    yaxis:{title:'g(t)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:false,
+    annotations:fAnnotations,
+    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:-100,y1:100,line:{color:'rgba(240,165,0,0.3)',width:1,dash:'dot'}})),
+  },{responsive:true,displayModeBar:false});
+
+  // ── Solution plot ─────────────────────────────────────────────────────────────
+  const solTraces=[{x:ts,y:ys,mode:'lines',line:{color:'#4d9fff',width:2.2},name:'y(t)'}];
+  Plotly.react('sol-plot',solTraces,{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:15,b:40,l:55},
+    xaxis:{range:[0,tMax],title:'t',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'y(t)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:false,
+    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:-1000,y1:1000,line:{color:'rgba(240,165,0,0.25)',width:1,dash:'dot'}})),
+    annotations:switchTimes.map(sw=>({x:sw.t,y:Math.max(...ys.filter(isFinite))*0.95,xref:'x',yref:'y',text:sw.label,font:{color:'rgba(240,165,0,0.6)',size:9},showarrow:false,xshift:5})),
+  },{responsive:true,displayModeBar:false});
+
+  // Laplace representation
+  let gLaplace=`g(t) = `;
+  const parts=[];
+  if(Math.abs(F1)>0.001) parts.push(`${F1.toFixed(1)}\\,u(t-${t1})`);
+  if(useT2&&Math.abs(F1)>0.001) parts.push(`-${F1.toFixed(1)}\\,u(t-${t2})`);
+  if(useImpulse) parts.push(`${Fd.toFixed(1)}\\,\\delta(t-${t3})`);
+  gLaplace+=(parts.length?parts.join('+'): '0').replace('+-','-');
+
+  let gS=`G(s) = `;
+  const sparts=[];
+  if(Math.abs(F1)>0.001) sparts.push(`\\frac{${F1.toFixed(1)}}{s}e^{-${t1}s}`);
+  if(useT2&&Math.abs(F1)>0.001) sparts.push(`-\\frac{${F1.toFixed(1)}}{s}e^{-${t2}s}`);
+  if(useImpulse) sparts.push(`${Fd.toFixed(1)}\\,e^{-${t3}s}`);
+  gS+=(sparts.length?sparts.join('+'): '0').replace('+-','-');
+
+  document.getElementById('laplace-text').innerHTML=
+    `<b>Laplace form:</b><br>$${gLaplace}$<br>$${gS}$<br><span style="font-size:0.75rem;">Second Shifting Theorem: $\\mathcal{L}\\{u(t-a)f(t-a)\\} = e^{-as}F(s)$</span>`;
+  if(window.renderMathInElement) renderMathInElement(document.getElementById('laplace-text'));
+}
+
+window.addEventListener('load',()=>{loadScenario();schedule();});
+// Initial value overrides
+document.getElementById('scenario-sel').value='on_off';
+</script>
+</body>
+</html>

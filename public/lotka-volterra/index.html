@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Predator-Prey &amp; Ecological Models</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Predator-Prey &amp; Ecological Models</h1>
+  <p class="demo-eq" id="top-eq">&nbsp;</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Model</div>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="model" value="pp" checked onchange="onModelChange()">
+          Predator-Prey &nbsp; (Lotka-Volterra)
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="model" value="comp" onchange="onModelChange()">
+          Competition
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="model" value="coop" onchange="onModelChange()">
+          Cooperation
+        </label>
+      </div>
+
+      <div class="ctrl-section">Parameters</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label" id="a-label">Prey growth a <span class="ctrl-val" id="a-v">1.0</span></div>
+        <input type="range" id="a-s" min="0.1" max="3" step="0.05" value="1.0"
+               oninput="sv('a-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label" id="b-label">Predation b <span class="ctrl-val" id="b-v">0.10</span></div>
+        <input type="range" id="b-s" min="0.01" max="1" step="0.01" value="0.1"
+               oninput="sv('b-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label" id="c-label">Predator loss c <span class="ctrl-val" id="c-v">0.50</span></div>
+        <input type="range" id="c-s" min="0.05" max="2" step="0.05" value="0.5"
+               oninput="sv('c-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label" id="d-label">Conversion d <span class="ctrl-val" id="d-v">0.05</span></div>
+        <input type="range" id="d-s" min="0.01" max="0.5" step="0.01" value="0.05"
+               oninput="sv('d-v',this.value,2); schedule()">
+      </div>
+
+      <div class="ctrl-section">Initial Conditions</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label" id="x0-label">x₀ (prey) <span class="ctrl-val" id="x0-v">10</span></div>
+        <input type="range" id="x0-s" min="1" max="50" step="1" value="10"
+               oninput="sv('x0-v',this.value,0); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label" id="y0-label">y₀ (predator) <span class="ctrl-val" id="y0-v">5</span></div>
+        <input type="range" id="y0-s" min="1" max="50" step="1" value="5"
+               oninput="sv('y0-v',this.value,0); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">50</span></div>
+        <input type="range" id="T-s" min="10" max="200" step="5" value="50"
+               oninput="sv('T-v',this.value,0); schedule()">
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-multi" onchange="schedule()">
+          Show multiple initial conditions
+        </label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-jac" onchange="schedule()" checked>
+          Show Jacobian at equilibria
+        </label>
+      </div>
+
+      <div style="margin-top:1rem; padding:0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; font-size:0.82rem;" id="jac-display"></div>
+    </div>
+
+    <!-- ── Plots ─────────────────────────────────────────────────────────── -->
+    <div>
+      <div class="plot-box" id="phase-plot" style="height:360px;"></div>
+      <div class="plot-box" id="time-plot" style="height:240px; margin-top:0.75rem;"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let scheduledRaf = null;
+function sv(id, val, dp) { document.getElementById(id).textContent = dp !== '' ? (+val).toFixed(dp) : val; }
+function schedule() { if (scheduledRaf) cancelAnimationFrame(scheduledRaf); scheduledRaf = requestAnimationFrame(build); }
+
+function onModelChange() {
+  const m = document.querySelector('input[name="model"]:checked').value;
+  const labels = {
+    pp: { a:'Prey growth a', b:'Predation b', c:'Predator loss c', d:'Conversion d', x0:'x₀ (prey)', y0:'y₀ (predator)' },
+    comp: { a:'Self-limit a₁', b:'Competition b', c:'Competition c', d:'Self-limit a₂', x0:'x₀', y0:'y₀' },
+    coop: { a:'Self-limit a₁', b:'Cooperation b', c:'Cooperation c', d:'Self-limit a₂', x0:'x₀', y0:'y₀' },
+  };
+  const L = labels[m];
+  ['a','b','c','d'].forEach(k => {
+    document.getElementById(`${k}-label`).childNodes[0].textContent = L[k] + ' ';
+  });
+  document.getElementById('x0-label').childNodes[0].textContent = L.x0 + ' ';
+  document.getElementById('y0-label').childNodes[0].textContent = L.y0 + ' ';
+
+  const eq = { pp: '$\\dot x = ax - bxy,\\quad \\dot y = -cy + dxy$',
+               comp: '$\\dot x = x(a - bx - y),\\quad \\dot y = y(d - cx - y)$',
+               coop: '$\\dot x = x(a - bx + y),\\quad \\dot y = y(d + cx - y)$' };
+  document.getElementById('top-eq').innerHTML = eq[m];
+  if (window.renderMathInElement) renderMathInElement(document.getElementById('top-eq'));
+  schedule();
+}
+
+// ── RK4 system ────────────────────────────────────────────────────────────────
+function rk4Sys(F, t, state, h) {
+  const k1 = F(t, state);
+  const k2 = F(t+h/2, state.map((s,i)=>s+h/2*k1[i]));
+  const k3 = F(t+h/2, state.map((s,i)=>s+h/2*k2[i]));
+  const k4 = F(t+h, state.map((s,i)=>s+h*k3[i]));
+  return state.map((s,i) => s + h/6*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+}
+
+function solveSys(F, x0, y0, tMax) {
+  const h = 0.05;
+  const xs=[x0], ys=[y0], ts=[0];
+  let state=[x0,y0];
+  for (let t=0; t<tMax; t+=h) {
+    state = rk4Sys(F, t, state, h);
+    if (!isFinite(state[0])||!isFinite(state[1])||state[0]<0||state[1]<0) break;
+    xs.push(state[0]); ys.push(state[1]); ts.push(t+h);
+  }
+  return {xs,ys,ts};
+}
+
+function getModel() {
+  const m = document.querySelector('input[name="model"]:checked').value;
+  const a=+document.getElementById('a-s').value, b=+document.getElementById('b-s').value;
+  const c=+document.getElementById('c-s').value, d=+document.getElementById('d-s').value;
+
+  let F, eqs, jacs;
+  if (m==='pp') {
+    F = (t,[x,y]) => [a*x - b*x*y, -c*y + d*x*y];
+    eqs = [[0,0],[c/d, a/b]];
+    jacs = [
+      [[a,0],[0,-c]],
+      [[0,-b*c/d],[d*a/b,0]],
+    ];
+  } else if (m==='comp') {
+    // x' = x(a - bx - y), y' = y(d - cx - y)
+    F = (t,[x,y]) => [x*(a-b*x-y), y*(d-c*x-y)];
+    eqs = [[0,0],[a/b,0],[0,d],[...solveLinear2x2(b,1,c,1,a,d)]];
+    eqs = eqs.filter(([x,y])=>x>=0&&y>=0&&isFinite(x)&&isFinite(y));
+    jacs = null;
+  } else {
+    // x' = x(a - bx + y), y' = y(d + cx - y)
+    F = (t,[x,y]) => [x*(a-b*x+y), y*(d+c*x-y)];
+    eqs = [[0,0]];
+    jacs = null;
+  }
+  return {F, eqs, jacs, a, b, c, d, m};
+}
+
+function solveLinear2x2(a11,a12,a21,a22,b1,b2) {
+  const det = a11*a22 - a12*a21;
+  if (Math.abs(det)<1e-12) return [NaN,NaN];
+  return [(b1*a22-b2*a12)/det, (a11*b2-a21*b1)/det];
+}
+
+function build() {
+  const {F, eqs, jacs, a, b, c, d, m} = getModel();
+  const x0=+document.getElementById('x0-s').value, y0=+document.getElementById('y0-s').value;
+  const tMax=+document.getElementById('T-s').value;
+  const showMulti = document.getElementById('show-multi').checked;
+  const showJac = document.getElementById('show-jac').checked;
+
+  const {xs,ys,ts} = solveSys(F, x0, y0, tMax);
+  const xMax = Math.max(...xs)*1.2||20, yMax = Math.max(...ys)*1.2||20;
+
+  // ── Phase portrait ──────────────────────────────────────────────────────────
+  const phTraces = [];
+
+  // Nullclines
+  if (m==='pp') {
+    // x-nullcline: x=0 and y=a/b
+    phTraces.push({ x:[0,0], y:[0,yMax], mode:'lines', line:{color:'rgba(77,159,255,0.4)',width:1.5,dash:'dot'}, name:'x-nullcline', hoverinfo:'skip' });
+    phTraces.push({ x:[0,xMax], y:[a/b,a/b], mode:'lines', line:{color:'rgba(77,159,255,0.4)',width:1.5,dash:'dot'}, showlegend:false, hoverinfo:'skip' });
+    // y-nullcline: y=0 and x=c/d
+    phTraces.push({ x:[0,xMax], y:[0,0], mode:'lines', line:{color:'rgba(240,165,0,0.4)',width:1.5,dash:'dash'}, name:'y-nullcline', hoverinfo:'skip' });
+    phTraces.push({ x:[c/d,c/d], y:[0,yMax], mode:'lines', line:{color:'rgba(240,165,0,0.4)',width:1.5,dash:'dash'}, showlegend:false, hoverinfo:'skip' });
+  }
+
+  // Multiple ICs
+  if (showMulti) {
+    const multiICs = [
+      [x0*0.4, y0*0.4],[x0*0.7,y0*0.7],[x0*1.4,y0*1.4],[x0*2,y0],
+      [x0, y0*2],[x0*0.5,y0*2],[x0*2,y0*0.5],
+    ];
+    for (const [mx,my] of multiICs) {
+      if (mx<=0||my<=0) continue;
+      const {xs:mxs,ys:mys} = solveSys(F, mx, my, tMax);
+      phTraces.push({ x:mxs, y:mys, mode:'lines', line:{color:'rgba(77,159,255,0.2)',width:1}, hoverinfo:'skip', showlegend:false });
+    }
+  }
+
+  // Main trajectory
+  phTraces.push({ x:xs, y:ys, mode:'lines', type:'scatter', line:{color:'#4d9fff',width:2.2}, name:'Trajectory' });
+  phTraces.push({ x:[x0], y:[y0], mode:'markers', type:'scatter', marker:{color:'#f0a500',size:9,symbol:'circle'}, name:`(${x0},${y0})`, showlegend:false });
+
+  // Equilibria
+  for (const eq of eqs) {
+    phTraces.push({ x:[eq[0]], y:[eq[1]], mode:'markers', type:'scatter',
+      marker:{color:'#5de4c7',size:10,symbol:'circle',line:{color:'white',width:1.5}},
+      name:`Eq (${eq[0].toFixed(2)},${eq[1].toFixed(2)})`,
+      hovertemplate:`(${eq[0].toFixed(3)}, ${eq[1].toFixed(3)})<extra>Equilibrium</extra>` });
+  }
+
+  const phLayout = {
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:45,l:55},
+    xaxis:{range:[0,xMax],title:'x (prey / species 1)',gridcolor:'rgba(255,255,255,0.06)',zerolinecolor:'rgba(255,255,255,0.18)'},
+    yaxis:{range:[0,yMax],title:'y (predator / species 2)',gridcolor:'rgba(255,255,255,0.06)',zerolinecolor:'rgba(255,255,255,0.18)'},
+    showlegend:true, legend:{x:1.01,y:1,font:{size:9}},
+  };
+  Plotly.react('phase-plot', phTraces, phLayout, {responsive:true,displayModeBar:false});
+
+  // ── Time series ─────────────────────────────────────────────────────────────
+  const tsTraces = [
+    { x:ts, y:xs, mode:'lines', line:{color:'#4d9fff',width:2}, name:'x (prey)' },
+    { x:ts, y:ys, mode:'lines', line:{color:'#f0a500',width:2}, name:'y (predator)' },
+  ];
+  const tsLayout = {
+    paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:40,l:55},
+    xaxis:{range:[0,tMax],title:'t',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'Population',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true, legend:{x:1.01,y:1,font:{size:9}},
+  };
+  Plotly.react('time-plot', tsTraces, tsLayout, {responsive:true,displayModeBar:false});
+
+  // ── Jacobian display ────────────────────────────────────────────────────────
+  if (showJac && jacs && m==='pp') {
+    const eqLabels = ['(0, 0)', `(c/d, a/b) = (${(c/d).toFixed(2)}, ${(a/b).toFixed(2)})`];
+    const html = eqs.map((eq, i) => {
+      const J = jacs[i];
+      const tr = J[0][0]+J[1][1], det = J[0][0]*J[1][1]-J[0][1]*J[1][0];
+      const disc = tr*tr-4*det;
+      let cls = '';
+      if (det < 0) cls = 'Saddle';
+      else if (disc < 0) cls = tr < 0 ? 'Stable spiral/center' : tr > 0 ? 'Unstable spiral' : 'Center';
+      else cls = tr < 0 ? 'Stable node' : tr > 0 ? 'Unstable node' : 'Non-hyperbolic';
+      return `<b>${eqLabels[i]}</b><br>τ = ${tr.toFixed(3)}, Δ = ${det.toFixed(3)}<br><em>${cls}</em>`;
+    }).join('<hr style="border-color:rgba(255,255,255,0.1);margin:0.5rem 0;">');
+    document.getElementById('jac-display').innerHTML = '<div style="font-size:0.8rem;line-height:1.6;color:var(--muted);">' + html + '</div>';
+  } else {
+    document.getElementById('jac-display').innerHTML = '';
+  }
+
+  // Update equation
+  const eq = { pp: '$\\dot x = ax - bxy,\\quad \\dot y = -cy + dxy$',
+               comp: '$\\dot x = x(a - bx - y),\\quad \\dot y = y(d - cx - y)$',
+               coop: '$\\dot x = x(a - bx + y),\\quad \\dot y = y(d + cx - y)$' };
+  document.getElementById('top-eq').innerHTML = eq[m];
+  if (window.renderMathInElement) renderMathInElement(document.getElementById('top-eq'));
+}
+
+window.addEventListener('load', () => {
+  document.getElementById('top-eq').innerHTML = '$\\dot x = ax - bxy,\\quad \\dot y = -cy + dxy$';
+  build();
+});
+</script>
+</body>
+</html>

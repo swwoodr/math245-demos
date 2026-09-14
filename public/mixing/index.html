@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mixing / Tank Problems</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Mixing / Tank Problems</h1>
+  <p class="demo-eq" id="top-eq">$\dfrac{dQ}{dt} = r_{in}\,c_{in} - r_{out}\,\dfrac{Q}{V(t)}$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Initial Conditions</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Initial volume V₀ (gal) <span class="ctrl-val" id="V0-v">100</span></div>
+        <input type="range" id="V0-s" min="10" max="500" step="10" value="100"
+               oninput="sv('V0-v',this.value,0); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Initial salt Q₀ (oz) <span class="ctrl-val" id="Q0-v">0</span></div>
+        <input type="range" id="Q0-s" min="0" max="200" step="5" value="0"
+               oninput="sv('Q0-v',this.value,0); schedule()">
+      </div>
+
+      <div class="ctrl-section">Inflow</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Rate r_in (gal/min) <span class="ctrl-val" id="rin-v">3</span></div>
+        <input type="range" id="rin-s" min="0" max="20" step="0.5" value="3"
+               oninput="sv('rin-v',this.value,1); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Concentration c_in (oz/gal) <span class="ctrl-val" id="cin-v">0.50</span></div>
+        <input type="range" id="cin-s" min="0" max="5" step="0.05" value="0.5"
+               oninput="sv('cin-v',this.value,2); schedule()">
+      </div>
+
+      <div class="ctrl-section">Outflow</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Rate r_out (gal/min) <span class="ctrl-val" id="rout-v">4</span></div>
+        <input type="range" id="rout-s" min="0" max="20" step="0.5" value="4"
+               oninput="sv('rout-v',this.value,1); schedule()">
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span T (min) <span class="ctrl-val" id="T-v">60</span></div>
+        <input type="range" id="T-s" min="5" max="200" step="5" value="60"
+               oninput="sv('T-v',this.value,0); schedule()">
+      </div>
+
+      <!-- Metrics -->
+      <div class="metric-row" style="margin-top:1rem;">
+        <div class="metric"><div class="metric-value" id="Qfin">—</div><div class="metric-label">Q at T (oz)</div></div>
+        <div class="metric"><div class="metric-value" id="Cfin">—</div><div class="metric-label">Conc. at T (oz/gal)</div></div>
+      </div>
+      <div class="metric-row" style="margin-top:0.5rem;">
+        <div class="metric"><div class="metric-value" id="Vfin">—</div><div class="metric-label">V at T (gal)</div></div>
+        <div class="metric"><div class="metric-value" id="Qeq">—</div><div class="metric-label">Q equilibrium</div></div>
+      </div>
+
+      <div style="margin-top:0.75rem;padding:0.75rem;background:rgba(255,255,255,0.04);border-radius:8px;font-size:0.8rem;color:var(--muted);" id="ode-display"></div>
+    </div>
+
+    <!-- ── Plots ─────────────────────────────────────────────────────────── -->
+    <div>
+      <div class="plot-box" id="qt-plot" style="height:270px;"></div>
+      <div class="plot-box" id="ct-plot" style="height:220px; margin-top:0.75rem;"></div>
+      <div class="plot-box" id="vt-plot" style="height:180px; margin-top:0.75rem;"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let scheduledRaf=null;
+function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
+function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
+
+function build(){
+  const V0=+document.getElementById('V0-s').value;
+  const Q0=+document.getElementById('Q0-s').value;
+  const rin=+document.getElementById('rin-s').value;
+  const cin=+document.getElementById('cin-s').value;
+  const rout=+document.getElementById('rout-s').value;
+  const tMax=+document.getElementById('T-s').value;
+
+  // V(t) = V0 + (rin - rout)*t  (if volume stays positive)
+  // dQ/dt = rin*cin - rout * Q/V(t)
+
+  const h=0.05;
+  const Nt=Math.round(tMax/h);
+  const ts=[0],Qs=[Q0],Vs=[V0],Cs=[Q0/V0];
+  let Q=Q0;
+
+  for(let i=0;i<Nt;i++){
+    const t=ts[ts.length-1];
+    const V=V0+(rin-rout)*t;
+    if(V<=0.01) break; // tank empty
+    const dQ=rin*cin - rout*Q/V;
+    Q+=h*dQ;
+    if(Q<0) Q=0;
+    const Vnew=V0+(rin-rout)*(t+h);
+    ts.push(t+h); Qs.push(Q); Vs.push(Vnew); Cs.push(Q/Math.max(Vnew,0.01));
+  }
+
+  // Equilibrium (constant volume case)
+  const Vfin=Vs[Vs.length-1];
+  const Qfin=Qs[Qs.length-1];
+  const Cfin=Cs[Cs.length-1];
+
+  let Qeq;
+  if(Math.abs(rin-rout)<0.01) {
+    // Constant volume: Q* = V0 * cin * (rin/rout) = cin * V0
+    Qeq = cin * V0;
+  } else {
+    Qeq = NaN; // variable volume → no steady state
+  }
+
+  sv('Qfin',Qfin.toFixed(1),'');
+  sv('Cfin',Cfin.toFixed(4),'');
+  sv('Vfin',Vfin.toFixed(1),'');
+  sv('Qeq', isNaN(Qeq)?'N/A (var. vol.)':Qeq.toFixed(1),'');
+
+  // ODE display
+  const rNet=rin-rout;
+  const odeStr=Math.abs(rNet)<0.01
+    ? `V(t) = ${V0} gal (constant)<br>Q' = ${rin}·${cin} − ${rout}·Q/${V0} = ${(rin*cin).toFixed(2)} − ${(rout/V0).toFixed(4)}Q`
+    : `V(t) = ${V0} + ${rNet}t gal<br>Q' = ${(rin*cin).toFixed(2)} − (${rout}·Q)/V(t)`;
+  document.getElementById('ode-display').innerHTML=odeStr;
+
+  const qMax=Math.max(...Qs)*1.15||10;
+  const cMax=Math.max(...Cs)*1.2||2;
+
+  // Q(t) plot
+  const qTraces=[{x:ts,y:Qs,mode:'lines',line:{color:'#4d9fff',width:2.2},name:'Q(t) (oz)'}];
+  if(!isNaN(Qeq)){
+    qTraces.push({x:[0,ts[ts.length-1]],y:[Qeq,Qeq],mode:'lines',line:{color:'rgba(240,165,0,0.5)',width:1.5,dash:'dash'},name:`Q* = ${Qeq.toFixed(1)} oz`});
+  }
+  Plotly.react('qt-plot',qTraces,{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:40,l:60},
+    xaxis:{range:[0,ts[ts.length-1]],title:'t (min)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{range:[0,qMax],title:'Salt Q(t) (oz)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+  },{responsive:true,displayModeBar:false});
+
+  // Concentration plot
+  const cinLine=Array(ts.length).fill(cin);
+  Plotly.react('ct-plot',[
+    {x:ts,y:Cs,mode:'lines',line:{color:'#5de4c7',width:2},name:'c(t) = Q/V (oz/gal)'},
+    {x:ts,y:cinLine,mode:'lines',line:{color:'rgba(93,228,199,0.3)',width:1.2,dash:'dash'},name:`c_in = ${cin}`},
+  ],{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:40,l:60},
+    xaxis:{range:[0,ts[ts.length-1]],title:'t (min)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{range:[0,cMax],title:'Concentration (oz/gal)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+  },{responsive:true,displayModeBar:false});
+
+  // Volume plot
+  Plotly.react('vt-plot',[{x:ts,y:Vs,mode:'lines',line:{color:'#b57ff5',width:2},name:'V(t) (gal)'}],{
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:11},
+    margin:{t:10,r:20,b:40,l:60},
+    xaxis:{range:[0,ts[ts.length-1]],title:'t (min)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'Volume V(t) (gal)',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:false,
+  },{responsive:true,displayModeBar:false});
+}
+
+window.addEventListener('load', build);
+</script>
+</body>
+</html>

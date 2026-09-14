@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phase Line — 1D Autonomous ODEs</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Phase Line — 1D Autonomous ODEs</h1>
+  <p class="demo-eq">$\dfrac{dP}{dt} = f(P)$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Autonomous ODE: P&prime; = f(P)</div>
+      <div class="ctrl-row">
+        <select id="preset-sel" onchange="applyPreset()" style="width:100%; padding:0.4rem 0.5rem; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:0.9rem;">
+          <option value="p*(p-2)">P(P − 2) — two equilibria</option>
+          <option value="(p+1)*(p-2)*(p-2)">  (P+1)(P−2)² — semi-stable</option>
+          <option value="p*p*(p-3)*(p+2)">P²(P−3)(P+2) — four eq.</option>
+          <option value="p*p-4">P² − 4</option>
+          <option value="p*(p*p-4)">P(P²−4) — three eq.</option>
+          <option value="poly5">v⁵−5v⁴+2v³+20v²−24v (degree 5)</option>
+          <option value="logistic">Logistic: P(1 − P/100)</option>
+          <option value="custom">— custom —</option>
+        </select>
+      </div>
+      <div class="ctrl-row" id="custom-row" style="display:none;">
+        <input type="text" id="custom-expr" placeholder="e.g.  p*(p-1)*(p+2)"
+               style="width:100%; padding:0.4rem 0.5rem; background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:6px; font-family:var(--font-mono); font-size:0.85rem;"
+               oninput="customChanged()">
+        <div id="expr-error" style="color:#f06;font-size:0.78rem;margin-top:0.3rem;display:none;">Invalid expression (use variable <code>p</code>)</div>
+      </div>
+
+      <div class="ctrl-section">Window</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">P range <span class="ctrl-val" id="pr-v">−5 to 5</span></div>
+        <input type="range" id="pr-s" min="3" max="15" step="1" value="5"
+               oninput="sv('pr-v','-'+this.value+' to '+this.value,''); schedule()">
+      </div>
+
+      <div class="ctrl-section">Initial Conditions</div>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 0.5rem;">Click the f(P) plot or phase line to add P(0) values. Curves appear below.</p>
+      <button onclick="clearICs()" style="width:100%;padding:0.4rem;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:0.85rem;">Clear Trajectories</button>
+
+      <div style="margin-top:1rem;" id="eq-display"></div>
+    </div>
+
+    <!-- ── Plots ─────────────────────────────────────────────────────────── -->
+    <div>
+      <div class="plot-box" id="fp-plot" style="height:220px;"></div>
+      <div class="plot-box" id="pl-plot" style="height:90px; margin-top:0.75rem;"></div>
+      <div class="plot-box" id="ts-plot" style="height:240px; margin-top:0.75rem;"></div>
+    </div>
+
+  </div><!-- demo-layout -->
+</div><!-- demo-wrap -->
+
+<script>
+const ICS = [];
+const COLORS = ['#4d9fff','#f0a500','#5de4c7','#ff6b8a','#b57ff5','#ffd166','#06d6a0','#ef476f'];
+let scheduledRaf = null;
+let currentF = null;
+
+const PRESETS = {
+  'p*(p-2)':                 p => p*(p-2),
+  '(p+1)*(p-2)*(p-2)':      p => (p+1)*(p-2)*(p-2),
+  'p*p*(p-3)*(p+2)':         p => p*p*(p-3)*(p+2),
+  'p*p-4':                   p => p*p-4,
+  'p*(p*p-4)':               p => p*(p*p-4),
+  'poly5':                   p => p**5 - 5*p**4 + 2*p**3 + 20*p**2 - 24*p,
+  'logistic':                p => p*(1 - p/100),
+};
+
+function sv(id, val, dp) { document.getElementById(id).textContent = dp !== '' ? (+val).toFixed(dp) : val; }
+function schedule() { if (scheduledRaf) cancelAnimationFrame(scheduledRaf); scheduledRaf = requestAnimationFrame(build); }
+
+function applyPreset() {
+  const sel = document.getElementById('preset-sel').value;
+  document.getElementById('custom-row').style.display = sel === 'custom' ? 'block' : 'none';
+  if (sel !== 'custom') {
+    currentF = PRESETS[sel];
+    document.getElementById('expr-error').style.display = 'none';
+    schedule();
+  }
+}
+
+function customChanged() {
+  const expr = document.getElementById('custom-expr').value.trim();
+  try {
+    const fn = new Function('p', '"use strict"; return (' + expr + ')');
+    fn(0);
+    currentF = fn;
+    document.getElementById('expr-error').style.display = 'none';
+    schedule();
+  } catch(e) {
+    document.getElementById('expr-error').style.display = 'block';
+  }
+}
+
+function clearICs() { ICS.length = 0; schedule(); }
+
+// ── Equilibria ────────────────────────────────────────────────────────────────
+function findEquilibria(f, pMin, pMax) {
+  const n = 2000;
+  const dp = (pMax - pMin) / n;
+  const eqs = [];
+  let prev = f(pMin);
+  for (let i = 1; i <= n; i++) {
+    const p = pMin + i * dp;
+    const curr = f(p);
+    if (!isFinite(prev) || !isFinite(curr)) { prev = curr; continue; }
+    if (prev * curr <= 0) {
+      // bisect
+      let lo = p - dp, hi = p;
+      for (let k = 0; k < 50; k++) {
+        const mid = (lo + hi) / 2;
+        if (f(lo) * f(mid) <= 0) hi = mid; else lo = mid;
+      }
+      const eq = (lo + hi) / 2;
+      if (eqs.length === 0 || Math.abs(eq - eqs[eqs.length-1]) > 1e-6) eqs.push(eq);
+    }
+    prev = curr;
+  }
+  return eqs;
+}
+
+function classifyEq(f, eq) {
+  const eps = 1e-4;
+  const fl = f(eq - eps), fr = f(eq + eps);
+  if (fl > 0 && fr < 0) return 'stable';
+  if (fl < 0 && fr > 0) return 'unstable';
+  return 'semi-stable';
+}
+
+// ── RK4 ODE solver ────────────────────────────────────────────────────────────
+function solveODE(f, p0, tMax) {
+  const h = 0.05;
+  const ts = [0], ps = [p0];
+  let p = p0;
+  for (let t = 0; t < tMax; t += h) {
+    const k1 = f(p);
+    const k2 = f(p + h/2 * k1);
+    const k3 = f(p + h/2 * k2);
+    const k4 = f(p + h * k3);
+    p = p + h/6 * (k1 + 2*k2 + 2*k3 + k4);
+    if (!isFinite(p)) break;
+    ts.push(t + h);
+    ps.push(p);
+  }
+  return { ts, ps };
+}
+
+// ── Build ─────────────────────────────────────────────────────────────────────
+function build() {
+  const f = currentF;
+  if (!f) return;
+
+  const pR = +document.getElementById('pr-s').value;
+  const pMin = -pR, pMax = pR;
+  const tMax = 15;
+
+  // --- f(P) plot ---
+  const Np = 500;
+  const pArr = [], fpArr = [];
+  for (let i = 0; i <= Np; i++) {
+    const p = pMin + (pMax - pMin) * i / Np;
+    pArr.push(p);
+    fpArr.push(f(p));
+  }
+
+  const eqs = findEquilibria(f, pMin, pMax);
+  const classifications = eqs.map(eq => classifyEq(f, eq));
+
+  const fpTraces = [{
+    x: pArr, y: fpArr,
+    mode: 'lines', type: 'scatter',
+    line: { color: '#4d9fff', width: 2 },
+    name: "f(P)",
+    hovertemplate: 'P=%{x:.3f}<br>f(P)=%{y:.3f}<extra></extra>',
+  }, {
+    x: pArr, y: Array(Np+1).fill(0),
+    mode: 'lines', type: 'scatter',
+    line: { color: 'rgba(255,255,255,0.15)', width: 1, dash: 'dot' },
+    hoverinfo: 'skip', showlegend: false,
+  }];
+
+  // Equilibrium markers on f(P) plot
+  const colorMap = { stable: '#5de4c7', unstable: '#ff6b8a', 'semi-stable': '#f0a500' };
+  for (let i = 0; i < eqs.length; i++) {
+    fpTraces.push({
+      x: [eqs[i]], y: [0],
+      mode: 'markers', type: 'scatter',
+      marker: { color: colorMap[classifications[i]], size: 10, symbol: classifications[i] === 'stable' ? 'circle' : classifications[i] === 'unstable' ? 'circle-open' : 'diamond' },
+      name: `P*=${eqs[i].toFixed(2)} (${classifications[i]})`,
+      hovertemplate: `P* = ${eqs[i].toFixed(3)}<br>${classifications[i]}<extra></extra>`,
+    });
+  }
+
+  const fpLayout = {
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(16,32,56,0.6)',
+    font: { color: '#D2E0EE', size: 11 },
+    margin: { t: 8, r: 15, b: 35, l: 55 },
+    xaxis: { range: [pMin, pMax], title: 'P', gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.2)' },
+    yaxis: { title: "f(P)", gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.2)' },
+    showlegend: true, legend: { x:1.01, y:1, font:{size:9} },
+  };
+
+  Plotly.react('fp-plot', fpTraces, fpLayout, { responsive: true, displayModeBar: false });
+
+  // --- Phase line ---
+  const arrowDensity = 40;
+  const arrowXs = [], arrowYs = [];
+  for (let i = 0; i <= arrowDensity; i++) {
+    const p = pMin + (pMax - pMin) * i / arrowDensity;
+    const fp = f(p);
+    if (!isFinite(fp) || Math.abs(fp) < 1e-6) continue;
+    const dir = fp > 0 ? 1 : -1;
+    const len = 0.4 * (pMax - pMin) / arrowDensity;
+    arrowXs.push(p, p + dir * len, null);
+    arrowYs.push(0, 0, null);
+  }
+
+  const plTraces = [{
+    x: [pMin, pMax], y: [0, 0],
+    mode: 'lines', type: 'scatter',
+    line: { color: 'rgba(200,220,255,0.5)', width: 2 },
+    hoverinfo: 'skip', showlegend: false,
+  }, {
+    x: arrowXs, y: arrowYs,
+    mode: 'lines', type: 'scatter',
+    line: { color: 'rgba(100,180,255,0.7)', width: 1.5 },
+    hoverinfo: 'skip', showlegend: false,
+  }];
+
+  for (let i = 0; i < eqs.length; i++) {
+    plTraces.push({
+      x: [eqs[i]], y: [0],
+      mode: 'markers', type: 'scatter',
+      marker: {
+        color: classifications[i] === 'stable' ? '#5de4c7' : classifications[i] === 'unstable' ? '#ff6b8a' : '#f0a500',
+        size: 14,
+        symbol: classifications[i] === 'stable' ? 'circle' : classifications[i] === 'unstable' ? 'circle-open' : 'diamond',
+        line: { color: 'white', width: 1.5 },
+      },
+      showlegend: false,
+      hovertemplate: `P* = ${eqs[i].toFixed(3)}<br>${classifications[i]}<extra></extra>`,
+    });
+  }
+
+  const plLayout = {
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(16,32,56,0.6)',
+    font: { color: '#D2E0EE', size: 11 },
+    margin: { t: 5, r: 15, b: 30, l: 55 },
+    xaxis: { range: [pMin, pMax], title: 'P', gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.2)' },
+    yaxis: { range: [-0.5, 0.5], showticklabels: false, showgrid: false, zeroline: false },
+    showlegend: false,
+    annotations: [{ x: pMin + (pMax-pMin)*0.02, y: 0.3, xref:'x', yref:'y', text:'Phase line', font:{color:'rgba(200,220,255,0.5)',size:10}, showarrow:false }],
+  };
+
+  Plotly.react('pl-plot', plTraces, plLayout, { responsive: true, displayModeBar: false });
+
+  // --- Time series ---
+  const tsTraces = [];
+  for (let i = 0; i < ICS.length; i++) {
+    const { ts, ps } = solveODE(f, ICS[i], tMax);
+    tsTraces.push({
+      x: ts, y: ps,
+      mode: 'lines', type: 'scatter',
+      line: { color: COLORS[i % COLORS.length], width: 2 },
+      name: `P(0)=${ICS[i].toFixed(2)}`,
+    });
+  }
+  // Equilibrium dashed lines on time-series plot
+  for (const eq of eqs) {
+    tsTraces.push({
+      x: [0, tMax], y: [eq, eq],
+      mode: 'lines', type: 'scatter',
+      line: { color: 'rgba(255,255,255,0.2)', width: 1, dash: 'dot' },
+      hoverinfo: 'skip', showlegend: false,
+    });
+  }
+
+  const tsLayout = {
+    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(16,32,56,0.6)',
+    font: { color: '#D2E0EE', size: 11 },
+    margin: { t: 8, r: 15, b: 40, l: 55 },
+    xaxis: { range: [0, tMax], title: 't', gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.2)' },
+    yaxis: { range: [pMin, pMax], title: 'P(t)', gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.2)' },
+    showlegend: ICS.length > 0,
+    legend: { x:1.01, y:1, font:{size:9} },
+  };
+
+  Plotly.react('ts-plot', tsTraces, tsLayout, { responsive: true, displayModeBar: false });
+
+  // Equilibrium classification display
+  const eqHtml = eqs.length === 0 ? '<span style="color:var(--muted)">No equilibria in range</span>' :
+    eqs.map((eq, i) => {
+      const cls = classifications[i];
+      const col = colorMap[cls];
+      return `<span style="color:${col}">P* = ${eq.toFixed(3)} (${cls})</span>`;
+    }).join('<br>');
+  document.getElementById('eq-display').innerHTML = '<div style="font-size:0.82rem;line-height:1.7;">' + eqHtml + '</div>';
+
+  // Attach click handlers
+  function addIC(p0) {
+    if (ICS.length >= COLORS.length) ICS.shift();
+    ICS.push(p0);
+    schedule();
+  }
+
+  if (!document.getElementById('fp-plot')._clickBound) {
+    document.getElementById('fp-plot')._clickBound = true;
+    document.getElementById('fp-plot').on('plotly_click', d => {
+      if (d.points && d.points[0]) addIC(d.points[0].x);
+    });
+  }
+  if (!document.getElementById('pl-plot')._clickBound) {
+    document.getElementById('pl-plot')._clickBound = true;
+    document.getElementById('pl-plot').on('plotly_click', d => {
+      if (d.points && d.points[0]) addIC(d.points[0].x);
+    });
+  }
+}
+
+window.addEventListener('load', () => {
+  currentF = PRESETS['p*(p-2)'];
+  build();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Characteristic Roots Explorer</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Characteristic Roots Explorer</h1>
+  <p class="demo-eq">$my'' + cy' + ky = 0$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ──────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">ODE Parameters</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Mass m <span class="ctrl-val" id="m-v">1.00</span></div>
+        <input type="range" id="m-s" min="0.1" max="5" step="0.1" value="1"
+               oninput="sv('m-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Damping c <span class="ctrl-val" id="c-v">1.00</span></div>
+        <input type="range" id="c-s" min="0" max="10" step="0.05" value="1"
+               oninput="sv('c-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Stiffness k <span class="ctrl-val" id="k-v">2.00</span></div>
+        <input type="range" id="k-s" min="0.1" max="10" step="0.1" value="2"
+               oninput="sv('k-v',this.value,2); schedule()">
+      </div>
+
+      <div class="ctrl-section">Initial Conditions</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">y(0) <span class="ctrl-val" id="y0-v">1.00</span></div>
+        <input type="range" id="y0-s" min="-3" max="3" step="0.1" value="1"
+               oninput="sv('y0-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">y'(0) <span class="ctrl-val" id="yp0-v">0.00</span></div>
+        <input type="range" id="yp0-s" min="-5" max="5" step="0.1" value="0"
+               oninput="sv('yp0-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">15</span></div>
+        <input type="range" id="T-s" min="3" max="40" step="1" value="15"
+               oninput="sv('T-v',this.value,0); schedule()">
+      </div>
+
+      <!-- Classification display -->
+      <div style="margin-top:1.25rem; padding:0.9rem; background:rgba(255,255,255,0.04); border-radius:8px;">
+        <div id="class-display" style="font-size:1rem;font-weight:600;text-align:center;margin-bottom:0.5rem;"></div>
+        <div id="roots-display" style="font-size:0.82rem;color:var(--muted);text-align:center;line-height:1.7;"></div>
+        <div id="disc-display" style="font-size:0.78rem;color:var(--muted);margin-top:0.4rem;text-align:center;"></div>
+      </div>
+
+      <div style="margin-top:0.75rem; padding:0.75rem; background:rgba(255,255,255,0.03); border-radius:8px; font-size:0.8rem; color:var(--muted);">
+        <div>$\Delta = c^2 - 4mk$</div>
+        <div>$r = \dfrac{-c \pm \sqrt{\Delta}}{2m}$</div>
+      </div>
+    </div>
+
+    <!-- ── Plots ─────────────────────────────────────────────────────────── -->
+    <div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+        <div class="plot-box" id="roots-plot" style="height:280px;"></div>
+        <div class="plot-box" id="sol-plot" style="height:280px;"></div>
+      </div>
+      <div class="plot-box" id="envelope-plot" style="height:220px; margin-top:0.75rem;"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let scheduledRaf = null;
+function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
+function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
+
+function build() {
+  const m=+document.getElementById('m-s').value;
+  const c=+document.getElementById('c-s').value;
+  const k=+document.getElementById('k-s').value;
+  const y0=+document.getElementById('y0-s').value;
+  const yp0=+document.getElementById('yp0-s').value;
+  const tMax=+document.getElementById('T-s').value;
+
+  const disc = c*c - 4*m*k;
+  const alpha = -c/(2*m);
+  let r1, r2, beta_, case_, classText, classColor, rootsText;
+
+  if (Math.abs(disc) < 1e-9 * (c*c + 4*m*k + 1)) {
+    // Critically damped
+    r1 = r2 = alpha;
+    case_ = 'critical';
+    classText = 'Critically Damped';
+    classColor = '#f0a500';
+    rootsText = `r = ${r1.toFixed(4)} (repeated)`;
+  } else if (disc > 0) {
+    // Overdamped
+    const sqrtD = Math.sqrt(disc);
+    r1 = alpha + sqrtD/(2*m);
+    r2 = alpha - sqrtD/(2*m);
+    case_ = 'over';
+    classText = 'Overdamped';
+    classColor = '#ff6b8a';
+    rootsText = `r₁ = ${r1.toFixed(4)}<br>r₂ = ${r2.toFixed(4)}`;
+  } else {
+    // Underdamped (complex)
+    beta_ = Math.sqrt(-disc)/(2*m);
+    case_ = 'under';
+    classText = c < 1e-9 ? 'Undamped (Pure Oscillation)' : 'Underdamped';
+    classColor = '#5de4c7';
+    rootsText = `r = ${alpha.toFixed(4)} ± ${beta_.toFixed(4)}i`;
+  }
+
+  document.getElementById('class-display').textContent = classText;
+  document.getElementById('class-display').style.color = classColor;
+  document.getElementById('roots-display').innerHTML = rootsText;
+  document.getElementById('disc-display').textContent = `Δ = c² − 4mk = ${disc.toFixed(4)}`;
+
+  // ── Roots in complex plane ──────────────────────────────────────────────────
+  let rootTraces = [];
+  const axisRange = Math.max(Math.abs(alpha)*1.5+0.5, beta_ ? beta_*1.5+0.5 : 1, Math.abs(r1||0)*1.3+0.5, Math.abs(r2||0)*1.3+0.5, 2);
+
+  // Axes
+  rootTraces.push({x:[-axisRange,axisRange],y:[0,0],mode:'lines',line:{color:'rgba(255,255,255,0.2)',width:1},hoverinfo:'skip',showlegend:false});
+  rootTraces.push({x:[0,0],y:[-axisRange,axisRange],mode:'lines',line:{color:'rgba(255,255,255,0.2)',width:1},hoverinfo:'skip',showlegend:false});
+
+  if (case_==='under') {
+    rootTraces.push({x:[alpha,alpha],y:[-beta_,beta_],mode:'markers',type:'scatter',
+      marker:{color:classColor,size:12,symbol:'cross',line:{color:'white',width:2}},
+      name:'r = α ± βi',
+      hovertemplate:`r = ${alpha.toFixed(4)} ± ${beta_.toFixed(4)}i<extra></extra>`});
+  } else if (case_==='critical') {
+    rootTraces.push({x:[r1],y:[0],mode:'markers',type:'scatter',
+      marker:{color:classColor,size:12,symbol:'square',line:{color:'white',width:2}},
+      name:`r = ${r1.toFixed(4)} (rep.)`,
+      hovertemplate:`r = ${r1.toFixed(4)}<extra>Repeated</extra>`});
+  } else {
+    rootTraces.push({x:[r1,r2],y:[0,0],mode:'markers',type:'scatter',
+      marker:{color:classColor,size:12,symbol:'circle',line:{color:'white',width:2}},
+      name:'r₁, r₂',
+      hovertemplate:'r = %{x:.4f}<extra></extra>'});
+  }
+
+  Plotly.react('roots-plot', rootTraces, {
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:10},
+    title:{text:'Complex Plane',font:{size:11,color:'#D2E0EE'},x:0.5},
+    margin:{t:35,r:15,b:40,l:45},
+    xaxis:{range:[-axisRange,axisRange],title:'Re(r)',gridcolor:'rgba(255,255,255,0.06)',zeroline:true,zerolinecolor:'rgba(255,255,255,0.3)',dtick:1},
+    yaxis:{range:[-axisRange,axisRange],title:'Im(r)',gridcolor:'rgba(255,255,255,0.06)',zeroline:true,zerolinecolor:'rgba(255,255,255,0.3)',dtick:1,scaleanchor:'x'},
+    showlegend:true,legend:{x:0,y:1,font:{size:8}},
+  },{responsive:true,displayModeBar:false});
+
+  // ── Solution y(t) ────────────────────────────────────────────────────────────
+  const Nt=800;
+  const ts=[], ys=[];
+  for(let i=0;i<=Nt;i++){
+    const t=tMax*i/Nt;
+    ts.push(t);
+    let y;
+    if(case_==='critical'){
+      // y=(C1+C2*t)*e^(r1*t); C1=y0, C2=yp0-r1*y0
+      const C1=y0, C2=yp0-r1*y0;
+      y=(C1+C2*t)*Math.exp(r1*t);
+    } else if(case_==='over'){
+      // C1*e^(r1*t)+C2*e^(r2*t)
+      const det=1/(r1-r2);
+      const C1=(yp0-r2*y0)*det, C2=(r1*y0-yp0)*det;
+      y=C1*Math.exp(r1*t)+C2*Math.exp(r2*t);
+    } else {
+      // e^(alpha*t)*(C1*cos(beta*t)+C2*sin(beta*t))
+      const C1=y0, C2=(yp0-alpha*y0)/beta_;
+      y=Math.exp(alpha*t)*(C1*Math.cos(beta_*t)+C2*Math.sin(beta_*t));
+    }
+    ys.push(isFinite(y)?y:NaN);
+  }
+
+  const solTraces=[{x:ts,y:ys,mode:'lines',line:{color:classColor,width:2.2},name:'y(t)'}];
+
+  // Envelope for underdamped
+  if(case_==='under' && alpha<0){
+    const C1=y0, C2=(yp0-alpha*y0)/beta_;
+    const amp=Math.sqrt(C1*C1+C2*C2);
+    const env=ts.map(t=>amp*Math.exp(alpha*t));
+    solTraces.push({x:ts,y:env,mode:'lines',line:{color:'rgba(240,165,0,0.4)',width:1.2,dash:'dash'},name:'Envelope',hoverinfo:'skip'});
+    solTraces.push({x:ts,y:env.map(v=>-v),mode:'lines',line:{color:'rgba(240,165,0,0.4)',width:1.2,dash:'dash'},showlegend:false,hoverinfo:'skip'});
+  }
+
+  Plotly.react('sol-plot', solTraces, {
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:10},
+    title:{text:'Solution y(t)',font:{size:11,color:'#D2E0EE'},x:0.5},
+    margin:{t:35,r:15,b:40,l:50},
+    xaxis:{range:[0,tMax],title:'t',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'y',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:8}},
+  },{responsive:true,displayModeBar:false});
+
+  // ── Sweep: c sweep showing all regimes ───────────────────────────────────────
+  const Nc=300;
+  const cCrit=2*Math.sqrt(m*k);
+  const cVals=Array.from({length:Nc+1},(_,i)=>i*cCrit*2.5/Nc);
+  const discVals=cVals.map(cv=>cv*cv-4*m*k);
+  const r1vals=discVals.map((d,i)=>{
+    if(d>0)return (-cVals[i]+Math.sqrt(d))/(2*m);
+    return -cVals[i]/(2*m);
+  });
+  const r2vals=discVals.map((d,i)=>{
+    if(d>0)return (-cVals[i]-Math.sqrt(d))/(2*m);
+    return -cVals[i]/(2*m);
+  });
+  const imVals=discVals.map((d,i)=> d<0 ? Math.sqrt(-d)/(2*m) : 0);
+
+  const sweepTraces=[
+    {x:cVals,y:r1vals,mode:'lines',line:{color:'#4d9fff',width:2},name:'Re(r₁)'},
+    {x:cVals,y:r2vals,mode:'lines',line:{color:'rgba(77,159,255,0.4)',width:1.5,dash:'dot'},name:'Re(r₂)'},
+    {x:cVals,y:imVals,mode:'lines',line:{color:'#5de4c7',width:2},name:'Im(r) = ±β'},
+    {x:cVals,y:imVals.map(v=>-v),mode:'lines',line:{color:'rgba(93,228,199,0.4)',width:1.5,dash:'dot'},showlegend:false,hoverinfo:'skip'},
+    {x:[cCrit,cCrit],y:[-cCrit/(2*m),0],mode:'lines',line:{color:'rgba(240,165,0,0.6)',width:1.5,dash:'dash'},name:`c_crit=${cCrit.toFixed(2)}`,hoverinfo:'skip'},
+    {x:[c],y:[c<cCrit?-c/(2*m):((-c+Math.sqrt(disc))/(2*m))],mode:'markers',marker:{color:'#f0a500',size:10,symbol:'diamond'},name:`c=${c.toFixed(2)}`,showlegend:false},
+  ];
+
+  Plotly.react('envelope-plot', sweepTraces, {
+    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
+    font:{color:'#D2E0EE',size:10},
+    title:{text:'Roots vs. Damping c  (m and k fixed)',font:{size:11,color:'#D2E0EE'},x:0.5},
+    margin:{t:35,r:20,b:40,l:50},
+    xaxis:{range:[0,cCrit*2.5],title:'c (damping coefficient)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'Root value',gridcolor:'rgba(255,255,255,0.06)'},
+    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+    shapes:[{type:'rect',x0:0,x1:cCrit,y0:-100,y1:100,fillcolor:'rgba(93,228,199,0.04)',line:{width:0}}],
+  },{responsive:true,displayModeBar:false});
+}
+
+window.addEventListener('load', build);
+</script>
+</body>
+</html>
