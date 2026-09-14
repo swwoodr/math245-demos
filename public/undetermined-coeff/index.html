@@ -112,6 +112,7 @@
 </style>
 
 <script>
+const KATEX_OPTS={delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]};
 function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
 
 function setEx(a,b,c,gtype,n,alpha,beta){
@@ -265,7 +266,7 @@ function build(){
       :`<span style="color:#f0a500;">⚠ Modification Rule (×t²):</span> The characteristic pair is a <b>repeated root</b>. Multiply by $t^2$.`;
     modBox.innerHTML=modMsg;
     modBox.style.display='block';
-    if(window.renderMathInElement) renderMathInElement(modBox);
+    if(window.renderMathInElement) renderMathInElement(modBox,KATEX_OPTS);
   } else {
     modBox.style.display='none';
   }
@@ -275,7 +276,7 @@ function build(){
 
   // Render math
   ['yc-display','yp-trial-display','explanation'].forEach(id=>{
-    if(window.renderMathInElement) renderMathInElement(document.getElementById(id));
+    if(window.renderMathInElement) renderMathInElement(document.getElementById(id),KATEX_OPTS);
   });
 
   // --- Numeric solution plot ---

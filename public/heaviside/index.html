@@ -197,6 +197,16 @@ function build(){
     ts.push(t+h); ys.push(isFinite(y)?y:NaN); gts.push(g(t+h));
   }
 
+  // ── Compute data ranges for axis/shape extents ───────────────────────────────
+  const finiteG=gts.filter(isFinite), finiteY=ys.filter(isFinite);
+  const gMin=Math.min(...finiteG), gMax=Math.max(...finiteG);
+  const yMin=Math.min(...finiteY), yMax=Math.max(...finiteY);
+  const gPad=Math.max(0.2,(gMax-gMin)*0.2);
+  const yPad=Math.max(0.05,(yMax-yMin)*0.15);
+  const gLo=gMin-gPad, gHi=gMax+gPad;
+  const yLo=yMin-yPad, yHi=yMax+yPad;
+  const yLabelY=yMax>0?yMax*0.9:yMin*0.9;
+
   // ── Forcing plot ─────────────────────────────────────────────────────────────
   const switchTimes=[];
   if(t1>=0&&t1<=tMax)switchTimes.push({t:t1,label:`t₁=${t1}`});
@@ -205,9 +215,9 @@ function build(){
 
   const fTraces=[{x:ts,y:gts,mode:'lines',line:{color:'#f0a500',width:2},name:'g(t)'}];
   const fAnnotations=switchTimes.map(sw=>({
-    x:sw.t,y:0,xref:'x',yref:'y',
+    x:sw.t,y:gLo,xref:'x',yref:'y',
     text:sw.label,font:{color:'rgba(240,165,0,0.7)',size:9},
-    showarrow:true,arrowhead:3,arrowcolor:'rgba(240,165,0,0.5)',arrowsize:0.7,ax:0,ay:-25,
+    showarrow:true,arrowhead:3,arrowcolor:'rgba(240,165,0,0.5)',arrowsize:0.7,ax:0,ay:-20,
   }));
 
   Plotly.react('forcing-plot',fTraces,{
@@ -215,10 +225,10 @@ function build(){
     font:{color:'#D2E0EE',size:10},
     margin:{t:5,r:15,b:30,l:50},
     xaxis:{range:[0,tMax],gridcolor:'rgba(255,255,255,0.06)',title:''},
-    yaxis:{title:'g(t)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{range:[gLo,gHi],title:'g(t)',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:false,
     annotations:fAnnotations,
-    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:-100,y1:100,line:{color:'rgba(240,165,0,0.3)',width:1,dash:'dot'}})),
+    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:gLo,y1:gHi,line:{color:'rgba(240,165,0,0.3)',width:1,dash:'dot'}})),
   },{responsive:true,displayModeBar:false});
 
   // ── Solution plot ─────────────────────────────────────────────────────────────
@@ -228,10 +238,10 @@ function build(){
     font:{color:'#D2E0EE',size:11},
     margin:{t:10,r:15,b:40,l:55},
     xaxis:{range:[0,tMax],title:'t',gridcolor:'rgba(255,255,255,0.06)'},
-    yaxis:{title:'y(t)',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{range:[yLo,yHi],title:'y(t)',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:false,
-    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:-1000,y1:1000,line:{color:'rgba(240,165,0,0.25)',width:1,dash:'dot'}})),
-    annotations:switchTimes.map(sw=>({x:sw.t,y:Math.max(...ys.filter(isFinite))*0.95,xref:'x',yref:'y',text:sw.label,font:{color:'rgba(240,165,0,0.6)',size:9},showarrow:false,xshift:5})),
+    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:yLo,y1:yHi,line:{color:'rgba(240,165,0,0.25)',width:1,dash:'dot'}})),
+    annotations:switchTimes.map(sw=>({x:sw.t,y:yLabelY,xref:'x',yref:'y',text:sw.label,font:{color:'rgba(240,165,0,0.6)',size:9},showarrow:false,xshift:5})),
   },{responsive:true,displayModeBar:false});
 
   // Laplace representation
@@ -251,7 +261,7 @@ function build(){
 
   document.getElementById('laplace-text').innerHTML=
     `<b>Laplace form:</b><br>$${gLaplace}$<br>$${gS}$<br><span style="font-size:0.75rem;">Second Shifting Theorem: $\\mathcal{L}\\{u(t-a)f(t-a)\\} = e^{-as}F(s)$</span>`;
-  if(window.renderMathInElement) renderMathInElement(document.getElementById('laplace-text'));
+  if(window.renderMathInElement) renderMathInElement(document.getElementById('laplace-text'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
 }
 
 window.addEventListener('load',()=>{loadScenario();schedule();});
