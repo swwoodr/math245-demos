@@ -71,6 +71,7 @@ const ICS = [];
 const COLORS = ['#4d9fff','#f0a500','#5de4c7','#ff6b8a','#b57ff5','#ffd166','#06d6a0','#ef476f'];
 let scheduledRaf = null;
 let currentF = null;
+let fpClickBound = false, plClickBound = false;
 
 const PRESETS = {
   'p*(p-2)':                 p => p*(p-2),
@@ -312,24 +313,31 @@ function build() {
     }).join('<br>');
   document.getElementById('eq-display').innerHTML = '<div style="font-size:0.82rem;line-height:1.7;">' + eqHtml + '</div>';
 
-  // Attach click handlers
+  // Attach click handlers — native DOM click + p2d for exact coordinates
   function addIC(p0) {
+    if (!isFinite(p0)) return;
+    const pR = +document.getElementById('pr-s').value;
+    if (p0 < -pR || p0 > pR) return;
     if (ICS.length >= COLORS.length) ICS.shift();
     ICS.push(p0);
     schedule();
   }
 
-  if (!document.getElementById('fp-plot')._clickBound) {
-    document.getElementById('fp-plot')._clickBound = true;
-    document.getElementById('fp-plot').on('plotly_click', d => {
-      if (d.points && d.points[0]) addIC(d.points[0].x);
-    });
+  function pFromClick(divId, evt) {
+    const gd = document.getElementById(divId);
+    if (!gd._fullLayout) return NaN;
+    const rect = gd.getBoundingClientRect();
+    const px = evt.clientX - rect.left - gd._fullLayout.margin.l;
+    return gd._fullLayout.xaxis.p2d(px);
   }
-  if (!document.getElementById('pl-plot')._clickBound) {
-    document.getElementById('pl-plot')._clickBound = true;
-    document.getElementById('pl-plot').on('plotly_click', d => {
-      if (d.points && d.points[0]) addIC(d.points[0].x);
-    });
+
+  if (!fpClickBound) {
+    fpClickBound = true;
+    document.getElementById('fp-plot').addEventListener('click', evt => addIC(pFromClick('fp-plot', evt)));
+  }
+  if (!plClickBound) {
+    plClickBound = true;
+    document.getElementById('pl-plot').addEventListener('click', evt => addIC(pFromClick('pl-plot', evt)));
   }
 }
 
