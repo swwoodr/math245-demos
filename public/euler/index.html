@@ -59,7 +59,7 @@
                oninput="sv('y0-v',this.value); schedule()">
       </div>
 
-      <div class="ctrl-section">Step Parameters</div>
+      <div class="ctrl-section">Step Parameters (fixed-step methods)</div>
       <div class="ctrl-row">
         <div class="ctrl-label">Step size h <span class="ctrl-val" id="h-v">0.50</span></div>
         <input type="range" id="h-s" min="0.05" max="2" step="0.05" value="0.5"
@@ -69,6 +69,13 @@
         <div class="ctrl-label">Steps n <span class="ctrl-val" id="n-v">8</span></div>
         <input type="range" id="n-s" min="1" max="30" step="1" value="8"
                oninput="sv('n-v',this.value); schedule()">
+      </div>
+
+      <div class="ctrl-section">ode45 Tolerance</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">rtol <span class="ctrl-val" id="tol-v">1e−4</span></div>
+        <input type="range" id="tol-s" min="-8" max="-2" step="1" value="-4"
+               oninput="updateTolDisplay(); schedule()">
       </div>
 
       <div class="ctrl-section">Display</div>
@@ -129,6 +136,12 @@
               <td id="m-errRK" style="color:#D44848;">—</td>
             </tr>
             <tr>
+              <td class="lbl"><span class="dot" style="background:#F59E0B;"></span>RK45 (ode45)</td>
+              <td style="color:var(--muted)">O(h⁵)*</td>
+              <td id="m-y45">—</td>
+              <td id="m-err45" style="color:#D44848;">—</td>
+            </tr>
+            <tr>
               <td class="lbl" colspan="2" style="color:var(--muted); font-size:0.75rem;">
                 <span class="dot" style="background:#27A96C;"></span>Exact  at xₙ
               </td>
@@ -136,12 +149,15 @@
             </tr>
           </tbody>
         </table>
+        <div style="font-size:0.72rem; color:var(--muted); margin-top:0.4rem; padding:0 0.2rem;">
+          * RK45 uses adaptive step sizes chosen to meet the tolerance; steps taken: <span id="m-nsteps45">—</span>
+        </div>
       </div>
 
       <!-- Step-by-step table -->
       <div class="expander">
         <div class="expander-head" onclick="toggleExp(this)">
-          <span>📋 Step-by-step table</span>
+          <span>📋 Step-by-step table (Euler / Imp. Euler / RK4)</span>
           <span class="expander-arrow">▼</span>
         </div>
         <div class="expander-body hidden">
@@ -157,7 +173,7 @@
       <!-- Error convergence plot -->
       <div class="expander">
         <div class="expander-head" onclick="toggleConv(this)">
-          <span>📉 Error vs step size h (all three methods)</span>
+          <span>📉 Error vs step size h (all four methods)</span>
           <span class="expander-arrow">▼</span>
         </div>
         <div class="expander-body hidden">
@@ -254,6 +270,57 @@ function rk4Steps(f, x0, y0, h, n) {
   return {xs, ys};
 }
 
+// Dormand-Prince RK4(5) — the algorithm behind MATLAB's ode45
+// Uses 6 stages to produce both a 4th- and 5th-order estimate;
+// the difference drives adaptive step-size control.
+function rkf45Steps(f, x0, y0, xEnd, rtol) {
+  const atol = rtol * 1e-3;
+  // Butcher tableau (Dormand-Prince)
+  const a21=1/5,
+        a31=3/40,       a32=9/40,
+        a41=44/45,      a42=-56/15,     a43=32/9,
+        a51=19372/6561, a52=-25360/2187,a53=64448/6561,a54=-212/729,
+        a61=9017/3168,  a62=-355/33,    a63=46732/5247,a64=49/176,  a65=-5103/18656;
+  // 5th-order weights
+  const b1=35/384,b3=500/1113,b4=125/192,b5=-2187/6784,b6=11/84;
+  // Error weights (5th - 4th order)
+  const e1=71/57600,e3=-71/16695,e4=71/1920,e5=-17253/339200,e6=22/525,e7=-1/40;
+
+  const xs=[x0], ys=[y0];
+  let x=x0, y=y0;
+  const span=xEnd-x0;
+  let h=span/8;
+  const hMin=span*1e-10, hMax=span;
+  let nEval=0;
+
+  for (let step=0; step<20000 && x<xEnd*(1-1e-12); step++) {
+    if (x+h>xEnd) h=xEnd-x;
+    const k1=f(x,y);
+    const k2=f(x+h/5,        y+h*(a21*k1));
+    const k3=f(x+h*3/10,     y+h*(a31*k1+a32*k2));
+    const k4=f(x+h*4/5,      y+h*(a41*k1+a42*k2+a43*k3));
+    const k5=f(x+h*8/9,      y+h*(a51*k1+a52*k2+a53*k3+a54*k4));
+    const k6=f(x+h,          y+h*(a61*k1+a62*k2+a63*k3+a64*k4+a65*k5));
+    nEval+=6;
+    const y5=y+h*(b1*k1+b3*k3+b4*k4+b5*k5+b6*k6);
+    const k7=f(x+h,y5); nEval++;
+    // Error norm
+    const err=Math.abs(h*(e1*k1+e3*k3+e4*k4+e5*k5+e6*k6+e7*k7));
+    const sc=atol+rtol*Math.max(Math.abs(y),Math.abs(y5));
+    const q=err/sc;
+    if (q<=1.0) { x+=h; y=y5; xs.push(x); ys.push(y); }
+    // PI step-size control
+    const scale=q>0 ? 0.9*Math.pow(q,-0.2) : 5;
+    h=Math.min(hMax, Math.max(hMin, h*Math.min(5,Math.max(0.1,scale))));
+  }
+  return {xs, ys, nEval};
+}
+
+function updateTolDisplay() {
+  const exp=parseInt(document.getElementById('tol-s').value);
+  document.getElementById('tol-v').textContent=`1e${exp<0?'−':'+'}${Math.abs(exp)}`;
+}
+
 // ── Plotly config ─────────────────────────────────────────────────────────────
 const CFG  = {displayModeBar:false, responsive:true};
 const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
@@ -279,13 +346,15 @@ function build() {
   const h    = g('h-s'),  n  = parseInt(g('n-s'));
   const showTan  = document.getElementById('show-tangents').checked;
   const showPred = document.getElementById('show-predictors').checked;
+  const rtol45   = Math.pow(10, parseInt(document.getElementById('tol-s').value));
 
-  // ── Compute all three methods ──
-  const {xs: xE,  ys: yE}          = eulerSteps(ode.f, x0, y0, h, n);
+  // ── Compute all four methods ──
+  const {xs: xE,  ys: yE}             = eulerSteps(ode.f, x0, y0, h, n);
   const {xs: xIE, ys: yIE, k1s, k2s} = heunSteps(ode.f, x0, y0, h, n);
-  const {xs: xRK, ys: yRK}         = rk4Steps(ode.f, x0, y0, h, n);
+  const {xs: xRK, ys: yRK}           = rk4Steps(ode.f, x0, y0, h, n);
+  const xEnd = x0 + n*h;
+  const {xs: x45, ys: y45}           = rkf45Steps(ode.f, x0, y0, xEnd, rtol45);
 
-  const xEnd   = x0 + n*h;
   const xFine  = Array.from({length:300}, (_,i) => x0 + i*(xEnd-x0)/299);
   const yExact = exactArr(ode, x0, y0, xFine);
 
@@ -335,6 +404,10 @@ function build() {
     {x:xRK, y:yRK, mode:'lines+markers', name:"RK4",
      line:{color:'#A056E0',width:2.5},
      marker:{color:'#A056E0',size:7,line:{color:'white',width:1}}},
+    // RK45 — adaptive steps (plotted at its own irregular x values)
+    {x:x45, y:y45, mode:'lines+markers', name:`ode45 (rtol=1e${parseInt(document.getElementById('tol-s').value)})`,
+     line:{color:'#F59E0B',width:2},
+     marker:{color:'#F59E0B',size:6,symbol:'diamond',line:{color:'white',width:1}}},
     // Exact
     {x:xFine, y:yExact, mode:'lines', name:'Exact',
      line:{color:'#27A96C',width:2.5}},
@@ -352,13 +425,17 @@ function build() {
 
   // ── Metrics table ──
   const yEf=yE[n], yIEf=yIE[n], yRKf=yRK[n], yTf=yExE[n];
+  const y45f=y45[y45.length-1];
   document.getElementById('m-yE').textContent   = yEf.toFixed(6);
   document.getElementById('m-yIE').textContent  = yIEf.toFixed(6);
   document.getElementById('m-yRK').textContent  = yRKf.toFixed(6);
+  document.getElementById('m-y45').textContent  = isFinite(y45f) ? y45f.toFixed(6) : '—';
   document.getElementById('m-yT').textContent   = yTf.toFixed(6);
   document.getElementById('m-errE').textContent  = fmtE(Math.abs(yEf -yTf));
   document.getElementById('m-errIE').textContent = fmtE(Math.abs(yIEf-yTf));
   document.getElementById('m-errRK').textContent = fmtE(Math.abs(yRKf-yTf));
+  document.getElementById('m-err45').textContent = fmtE(Math.abs(y45f-yTf));
+  document.getElementById('m-nsteps45').textContent = (x45.length-1)+' steps';
 
   // ── ODE formula ──
   document.getElementById('formula-box').innerHTML =
@@ -398,6 +475,7 @@ function build() {
     katex.renderToString('\\textbf{Euler:}\\quad y_{n+1}=y_n+h\\,f(x_n,y_n)', {throwOnError:false, displayMode:true}),
     katex.renderToString('\\textbf{Improved Euler (Heun):}\\\\[0.3em]k_1=f(x_n,y_n),\\quad k_2=f(x_n+h,\\,y_n+hk_1)\\\\[0.3em]y_{n+1}=y_n+\\tfrac{h}{2}(k_1+k_2)', {throwOnError:false, displayMode:true}),
     katex.renderToString('\\textbf{RK4:}\\\\[0.3em]k_1=f(x_n,y_n)\\\\k_2=f(x_n+\\tfrac{h}{2},y_n+\\tfrac{h}{2}k_1)\\\\k_3=f(x_n+\\tfrac{h}{2},y_n+\\tfrac{h}{2}k_2)\\\\k_4=f(x_n+h,\\,y_n+hk_3)\\\\[0.3em]y_{n+1}=y_n+\\tfrac{h}{6}(k_1+2k_2+2k_3+k_4)', {throwOnError:false, displayMode:true}),
+    katex.renderToString('\\textbf{RK45 (Dormand-Prince):}\\\\[0.3em]\\text{Six stages } k_1,\\ldots,k_6 \\text{ produce two estimates:}\\\\[0.4em]y^{(5)}_{n+1}=y_n+h\\!\\left(\\tfrac{35}{384}k_1+\\tfrac{500}{1113}k_3+\\tfrac{125}{192}k_4-\\tfrac{2187}{6784}k_5+\\tfrac{11}{84}k_6\\right)\\\\[0.4em]e_n = y^{(5)}-y^{(4)}\\approx O(h^5)\\\\[0.4em]\\text{Accept step if }\\|e_n\\|\\leq\\mathrm{rtol}\\cdot|y|+\\mathrm{atol};\\text{ adjust }h\\text{ by }h\\leftarrow 0.9\\,h\\bigl(\\|e_n\\|/\\epsilon\\bigr)^{-1/5}', {throwOnError:false, displayMode:true}),
   ].join('<hr style="border:none;border-top:1px solid var(--border);margin:0.75rem 0;">');
 }
 
@@ -413,7 +491,7 @@ function drawConvergence() {
   const xEnd  = x0 + xSpan;
   const yTrue = exactAt(ode, x0, y0, xEnd);
 
-  // n from 2 to 80; h = xSpan/n
+  // n from 2 to 80; h = xSpan/n  (fixed-step methods)
   const nVals  = Array.from({length:79}, (_,i) => i+2);
   const hVals  = nVals.map(n => xSpan/n);
   const errE=[], errIE=[], errRK=[];
@@ -425,6 +503,18 @@ function drawConvergence() {
     errRK.push(Math.abs(rk4Steps(  ode.f,x0,y0,hi,ni).ys[ni]  - yTrue));
   }
 
+  // ode45: vary tolerance → each gives a different (effective h_avg, error) point
+  const tols45 = [1e-2,3e-3,1e-3,3e-4,1e-4,3e-5,1e-5,3e-6,1e-6,3e-7,1e-7,1e-8];
+  const hEff45=[], err45=[];
+  for (const tol of tols45) {
+    const {xs:xs45,ys:ys45}=rkf45Steps(ode.f,x0,y0,xEnd,tol);
+    const nst=xs45.length-1;
+    if (nst>0) {
+      const ef=Math.abs(ys45[nst]-yTrue);
+      if (ef>0) { hEff45.push(xSpan/nst); err45.push(ef); }
+    }
+  }
+
   // Reference slopes anchored at h[0]
   const a0 = errE[0]  || 1e-4;
   const b0 = errIE[0] || 1e-4;
@@ -432,14 +522,22 @@ function drawConvergence() {
   const refH1 = hVals.map(h => a0 * (h/hVals[0]));
   const refH2 = hVals.map(h => b0 * (h/hVals[0])**2);
   const refH4 = hVals.map(h => c0 * (h/hVals[0])**4);
+  // O(h⁵) reference anchored at ode45's coarsest point
+  const hRef5 = hEff45[0]||hVals[hVals.length-1], errRef5 = err45[0]||1e-4;
+  const allH  = [...hVals, ...hEff45].sort((a,b)=>b-a);
+  const refH5 = allH.map(h => errRef5*(h/hRef5)**5);
 
   Plotly.react('conv-plot', [
     {x:hVals, y:errE,  mode:'lines', name:'Euler',          line:{color:'#4A8FD4',width:2}},
     {x:hVals, y:errIE, mode:'lines', name:'Improved Euler', line:{color:'#E87040',width:2}},
     {x:hVals, y:errRK, mode:'lines', name:'RK4',            line:{color:'#A056E0',width:2.5}},
+    {x:hEff45,y:err45, mode:'lines+markers',name:'ode45 (vary rtol)',
+     line:{color:'#F59E0B',width:2.5},
+     marker:{color:'#F59E0B',size:6,symbol:'diamond',line:{color:'white',width:1}}},
     {x:hVals, y:refH1, mode:'lines', name:'O(h)',           line:{color:'#89A4BC',width:1.2,dash:'dash'}},
     {x:hVals, y:refH2, mode:'lines', name:'O(h²)',          line:{color:'#E8C040',width:1.2,dash:'dash'}},
     {x:hVals, y:refH4, mode:'lines', name:'O(h⁴)',          line:{color:'#D2E0EE',width:1.2,dash:'longdash'}},
+    {x:allH,  y:refH5, mode:'lines', name:'O(h⁵)',          line:{color:'rgba(245,158,11,0.5)',width:1.2,dash:'longdash'}},
   ], {
     ...BASE,
     margin:{l:52, r:16, t:10, b:44},
