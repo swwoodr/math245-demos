@@ -15,7 +15,7 @@
 <div class="demo-wrap">
   <a class="back-link" href="/">← All Demos</a>
   <h1>SIR Epidemic Model</h1>
-  <p class="demo-eq">$\dot S = -\beta SI,\quad \dot I = \beta SI - \gamma I,\quad \dot R = \gamma I$</p>
+  <p class="demo-eq">$\dot S = -\tfrac{\beta SI}{N},\quad \dot I = \tfrac{\beta SI}{N} - \gamma I,\quad \dot R = \gamma I$</p>
 
   <div class="demo-layout">
 
@@ -79,7 +79,7 @@
 
       <!-- R₀ gauge -->
       <div style="margin-top:1rem; padding:0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; text-align:center;">
-        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.25rem;">Basic reproduction number</div>
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.25rem;">Effective R₀ at t=0</div>
         <div id="r0-display" style="font-size:2rem;font-weight:700;font-family:var(--font-heading);"></div>
         <div id="r0-label" style="font-size:0.78rem;margin-top:0.25rem;"></div>
         <div style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;">$\mathcal{R}_0 = \beta S_0 / \gamma$</div>
@@ -140,7 +140,7 @@ function build() {
   else{r0El.style.color='#5de4c7';r0Lab.textContent='No epidemic (R₀≤1)';r0Lab.style.color='#5de4c7';}
 
   const F = isSIRS
-    ? (t,[S,I,R])=>[-beta*S*I/N, beta*S*I/N-gamma*I, gamma*I-omega*R]
+    ? (t,[S,I,R])=>[-beta*S*I/N+omega*R, beta*S*I/N-gamma*I, gamma*I-omega*R]
     : (t,[S,I,R])=>[-beta*S*I/N, beta*S*I/N-gamma*I, gamma*I];
 
   const h=0.1;
@@ -185,7 +185,7 @@ function build() {
   // ── Phase portrait in S-I plane ─────────────────────────────────────────────
   const phTraces=[
     {x:Ss,y:Is,mode:'lines',line:{color:'#b57ff5',width:2},name:'Trajectory'},
-    {x:[S0],[y]:[I0],mode:'markers',marker:{color:'#f0a500',size:9},name:`IC (${Math.round(S0)},${I0})`},
+    {x:[S0],y:[I0],mode:'markers',marker:{color:'#f0a500',size:9},name:`IC (${Math.round(S0)},${I0})`},
     {x:[Ss[Ss.length-1]],y:[Is[Is.length-1]],mode:'markers',marker:{color:'#5de4c7',size:9,symbol:'square'},name:'End state',showlegend:false},
   ];
   Plotly.react('phase-plot',phTraces,{

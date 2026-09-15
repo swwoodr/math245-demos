@@ -204,10 +204,10 @@ function buildTable(){
   const Ns=300;
   const sArr=Array.from({length:Ns},(_,i)=>sMin+(sMax-sMin)*i/Ns);
   const FsArr=sArr.map(s=>{
-    // Numerical Laplace: ∫₀^∞ e^(-st) f(t) dt ≈ sum
+    // Numerical Laplace: integrate only over [0,tMax] where ft is defined
     let sum=0;
     const h_s=0.01;
-    for(let t=h_s/2;t<20;t+=h_s){
+    for(let t=h_s/2;t<tMax;t+=h_s){
       sum+=Math.exp(-s*t)*ft[Math.min(Math.round(t/tMax*Nt),Nt)]*h_s;
     }
     return sum;
@@ -302,7 +302,7 @@ $Y(s) = \\dfrac{${gLs} + ${y0}s + (${yp0+a*y0})}{${charStr}}$<br><br>
   const sMin=0.1,sMax=8,Ns=300;
   const sArr=Array.from({length:Ns},(_,i)=>sMin+(sMax-sMin)*i/Ns);
   // Just show denominator magnitude (char poly)
-  const charMag=sArr.map(s=>1/Math.abs(s*s+a*s+b)||0);
+  const charMag=sArr.map(s=>{const v=1/Math.abs(s*s+a*s+b);return isFinite(v)?v:null;});
   Plotly.react('ivp-Ys-plot',[{x:sArr,y:charMag,mode:'lines',line:{color:'#b57ff5',width:2},name:'1/|s²+as+b|'}],{
     paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
     font:{color:'#D2E0EE',size:11},

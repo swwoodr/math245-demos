@@ -102,7 +102,7 @@ const PRESETS = {
   underdamped:  {sig:-0.5, om:2},
   pure_osc:     {sig:0, om:2},
   overdamped:   {sig:-2, om:0},
-  resonance:    {sig:0, om:2},  // Will be shown with t factor
+  resonance:    {sig:0, om:0},  // Repeated poles at origin → y(t)=t (linear growth)
   exp_growth:   {sig:0.5, om:1},
 };
 
@@ -134,13 +134,6 @@ function build() {
     {x:[0,0],y:[-sRange,sRange],mode:'lines',line:{color:'rgba(255,255,255,0.5)',width:2},name:'Imaginary axis',hoverinfo:'skip'},
     // Imaginary axis label annotation handled via layout
   ];
-
-  // Grid dots
-  for(let re=-Math.floor(sRange);re<=Math.floor(sRange);re++) {
-    for(let im=-Math.floor(sRange);im<=Math.floor(sRange);im++) {
-      if(re===0&&im===0) continue;
-    }
-  }
 
   // Poles
   if (isReal) {
@@ -185,23 +178,19 @@ function build() {
   if(isReal) {
     // Y(s) = 1/(s-σ)² → y(t) = t·e^(σt)
     ys=ts.map(t=>t*Math.exp(sig*t));
-    if(sig<-0.01){description='Two real repeated poles: y(t) = t·e^{σt} → 0 as t→∞ (decays)';descColor='#5de4c7';}
-    else if(sig>0.01){description='Two real repeated poles: y(t) = t·e^{σt} → ∞ (grows)';descColor='#ff6b8a';}
-    else{description='Two poles on imaginary axis: y(t) = t·sin(0·t) = 0 (degenerate resonance)';descColor='#f0a500';}
+    if(sig<-0.01){description='Repeated real poles: $y(t)=t\\,e^{\\sigma t}\\to 0$ as $t\\to\\infty$ — decays to zero';descColor='#5de4c7';}
+    else if(sig>0.01){description='Repeated real poles: $y(t)=t\\,e^{\\sigma t}\\to\\infty$ — grows unboundedly';descColor='#ff6b8a';}
+    else{description='Repeated poles at origin: $Y(s)=1/s^2$, so $y(t)=t$ — linear growth (engineering resonance)';descColor='#f0a500';}
   } else {
     // Y(s) = 1/((s-σ-jω)(s-σ+jω)) = 1/((s-σ)²+ω²)
     // → y(t) = (1/ω)·e^(σt)·sin(ωt)
     ys=ts.map(t=>(1/om)*Math.exp(sig*t)*Math.sin(om*t));
-    if(sig<-0.01){description=`Damped oscillation: y(t) = \\frac{1}{\\omega}e^{\\sigma t}\\sin(\\omega t) \\to 0`;descColor='#5de4c7';}
-    else if(sig>0.01){description='Unstable oscillation: amplitude grows exponentially';descColor='#ff6b8a';}
-    else{description=`Pure oscillation: y(t) = \\frac{1}{\\omega}\\sin(\\omega t)`;descColor='rgba(255,255,255,0.8)';}
+    if(sig<-0.01){description='Damped oscillation: $y(t)=\\tfrac{1}{\\omega}e^{\\sigma t}\\sin(\\omega t)\\to 0$ — stable (LHP poles)';descColor='#5de4c7';}
+    else if(sig>0.01){description='Unstable oscillation: $y(t)=\\tfrac{1}{\\omega}e^{\\sigma t}\\sin(\\omega t)\\to\\infty$ — unstable (RHP poles)';descColor='#ff6b8a';}
+    else{description='Pure oscillation: $y(t)=\\tfrac{1}{\\omega}\\sin(\\omega t)$ — constant amplitude, marginally stable';descColor='rgba(255,255,255,0.8)';}
   }
 
-  // Clip for display
-  const yMax=Math.max(...ys.filter(isFinite).map(Math.abs));
-  const clipY=isFinite(yMax)&&yMax>0?Math.min(yMax,yMax*1.1):1;
-
-  const tsTraces=[{x:ts,y:ys.map(y=>Math.max(-clipY,Math.min(clipY,y))),mode:'lines',
+  const tsTraces=[{x:ts,y:ys.map(y=>isFinite(y)?y:null),mode:'lines',
     line:{color:descColor||'#4d9fff',width:2.2},name:'y(t)'}];
 
   // Envelope
@@ -231,8 +220,10 @@ function build() {
     `<b>Stability:</b> <span style="color:${stabColor}">${stability}</span><br>` +
     (isReal?`<b>Signal:</b> t·e<sup>${sig.toFixed(2)}t</sup>`:`<b>Signal:</b> (1/ω)·e<sup>${sig.toFixed(2)}t</sup>·sin(${om.toFixed(2)}t)`);
 
-  document.getElementById('desc-text').style.color=descColor;
-  document.getElementById('desc-text').textContent=description.replace(/\\/g,'').replace(/\{|\}/g,'').replace(/_/g,'');
+  const descEl=document.getElementById('desc-text');
+  descEl.style.color=descColor;
+  descEl.innerHTML=description;
+  if(window.renderMathInElement) renderMathInElement(descEl,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
 }
 
 window.addEventListener('load', build);

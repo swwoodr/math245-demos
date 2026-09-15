@@ -45,7 +45,7 @@
       <div class="ctrl-section">Window</div>
       <div class="ctrl-row">
         <div class="ctrl-label">P range <span class="ctrl-val" id="pr-v">−5 to 5</span></div>
-        <input type="range" id="pr-s" min="3" max="15" step="1" value="5"
+        <input type="range" id="pr-s" min="3" max="150" step="1" value="5"
                oninput="sv('pr-v','-'+this.value+' to '+this.value,''); schedule()">
       </div>
 
@@ -92,6 +92,15 @@ function applyPreset() {
   if (sel !== 'custom') {
     currentF = PRESETS[sel];
     document.getElementById('expr-error').style.display = 'none';
+    // Set range appropriate to each preset
+    const rangeSlider = document.getElementById('pr-s');
+    if (sel === 'logistic') {
+      rangeSlider.value = 120;
+      document.getElementById('pr-v').textContent = '−120 to 120';
+    } else if (+rangeSlider.value > 15) {
+      rangeSlider.value = 5;
+      document.getElementById('pr-v').textContent = '−5 to 5';
+    }
     schedule();
   }
 }
@@ -297,7 +306,7 @@ function build() {
     font: { color: '#D2E0EE', size: 11 },
     margin: { t: 8, r: 15, b: 40, l: 55 },
     xaxis: { range: [0, tMax], title: 't', gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.2)' },
-    yaxis: { range: [pMin, pMax], title: 'P(t)', gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.2)' },
+    yaxis: { title: 'P(t)', gridcolor: 'rgba(255,255,255,0.06)', zerolinecolor: 'rgba(255,255,255,0.2)' },
     showlegend: ICS.length > 0,
     legend: { x:1.01, y:1, font:{size:9} },
   };

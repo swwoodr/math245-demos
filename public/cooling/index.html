@@ -123,7 +123,7 @@ const SCENARIOS = {
   custom:   { T0:180, Te:68,  k:0.10, ts:60,  desc:'' },
   coffee:   { T0:185, Te:68,  k:0.08, ts:90,  desc:'A freshly poured cup of coffee (185°F) cooling in a 68°F room. How long until it reaches drinking temperature (~140°F)?' },
   drink:    { T0:38,  Te:72,  k:0.07, ts:60,  desc:'A cold drink (38°F) warming up in a 72°F room. How long until it becomes unpleasantly warm (>55°F)?' },
-  forensic: { T0:98.6,Te:68,  k:0.07, ts:240, desc:'A body cools from normal temperature (98.6°F) toward room temperature. Given observed T at discovery, estimate time of death (k ≈ 0.07 °F/min).' },
+  forensic: { T0:98.6,Te:68,  k:0.07, ts:240, desc:'A body cools from normal temperature (98.6°F) toward room temperature. Given observed T at discovery, estimate time of death (k ≈ 0.07 min⁻¹).' },
   oven:     { T0:70,  Te:400, k:0.06, ts:90,  desc:'An oven preheating from room temperature (70°F) to 400°F. Note the equation is unchanged — T₀ < T_env means heating rather than cooling.' },
 };
 
@@ -170,6 +170,19 @@ function loadScenario() {
 function build() {
   const T0 = g('T0-s'), Te = g('Te-s'), k = g('k-s'), tSpan = g('ts-s');
   if (k <= 0 || tSpan <= 0) return;
+  if (T0 === Te) {
+    Plotly.react('main-plot',[{x:[0,tSpan],y:[Te,Te],mode:'lines',line:{color:'#89A4BC',width:2},name:'T(t) = T_env'}],
+      {...BASE,title:{text:'T₀ = T_env: no change',font:{size:13}},xaxis:{title:'t (min)',...AX},yaxis:{title:'T (°)',...AX},showlegend:false},CFG);
+    Plotly.react('semilog-plot',[],{...BASE,margin:{l:56,r:20,t:30,b:44},
+      title:{text:'T₀ = T_env: semi-log undefined',font:{size:12}},
+      xaxis:{title:'t (min)',...AX},yaxis:{title:'ln|T − T_env|',...AX}},CFG);
+    document.getElementById('m-tau').textContent='—';
+    document.getElementById('m-half').textContent='—';
+    document.getElementById('m-Tmid').textContent=Te.toFixed(1)+'°';
+    document.getElementById('m-Tend').textContent=Te.toFixed(1)+'°';
+    updateTarget();
+    return;
+  }
 
   const ts = linspace(0, tSpan, 500);
   const Ts = ts.map(t => T_soln(T0, Te, k, t));
@@ -215,25 +228,25 @@ function build() {
   }, CFG);
 
   // ── Semi-log plot: ln|T − T_env| vs t ──
-  // Should be a perfectly straight line with slope −k
-  const logDiff = ts.map((t,i) => {
-    const d = Math.abs(Ts[i] - Te);
-    return d > 1e-10 ? Math.log(d) : NaN;
-  });
-  const refLine = ts.map(t => Math.log(Math.abs(T0-Te)) - k*t);
+  // T(t) = Te + (T0-Te)e^{-kt}  →  ln|T−Te| = ln|T0−Te| − kt  (straight line)
+  const logLine = ts.map(t => Math.log(Math.abs(T0-Te)) - k*t);
+  const intercept = Math.log(Math.abs(T0-Te));
 
   const semiTraces = [
-    {x:ts, y:logDiff, mode:'lines',
-     line:{color:mainColor,width:2.5}, name:'ln|T − T_env|  (data)'},
-    {x:ts, y:refLine, mode:'lines',
-     line:{color:'#E8C040',width:1.5,dash:'dash'},
-     name:`−kt + ln|T₀ − T_env|  (slope = −${k.toFixed(3)})`},
+    {x:ts, y:logLine, mode:'lines',
+     line:{color:mainColor,width:2.5},
+     name:`ln|T₀−T_env| − kt  (slope = −${k.toFixed(3)})`},
+    // Slope annotation: two points highlighting the −k slope
+    {x:[ts[0], ts[Math.floor(ts.length/2)]],
+     y:[intercept, intercept - k*(tSpan/2)],
+     mode:'markers', marker:{color:'#E8C040',size:8},
+     name:'endpoints', showlegend:false},
   ];
 
   Plotly.react('semilog-plot', semiTraces, {
     ...BASE,
     margin:{l:56, r:20, t:30, b:44},
-    title:{text:'Semi-log plot confirms exponential decay', font:{size:12}},
+    title:{text:`Semi-log: ln|T−T_env| is linear in t with slope −k = −${k.toFixed(3)}`, font:{size:12}},
     showlegend:true,
     legend:{x:0.01,y:0.01,xanchor:'left',yanchor:'bottom',
             bgcolor:'rgba(12,26,48,0.8)',bordercolor:'#1A304D',borderwidth:1,font:{size:10}},
@@ -265,6 +278,7 @@ function updateTarget() {
   const el  = document.getElementById('target-result');
 
   if (!isFinite(Tgt) || !isFinite(T0) || !isFinite(Te) || k <= 0) { el.textContent=''; return; }
+  if (T0 === Te) { el.innerHTML = '<span style="color:var(--muted);">T₀ = T_env: no temperature change occurs.</span>'; return; }
 
   // T(t) = Te + (T0-Te)e^{-kt} = Tgt
   // e^{-kt} = (Tgt-Te)/(T0-Te)

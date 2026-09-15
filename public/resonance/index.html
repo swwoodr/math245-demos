@@ -27,9 +27,9 @@
                oninput="sv('m-v',this.value);schedule()">
       </div>
       <div class="ctrl-row">
-        <div class="ctrl-label">Damping c <span class="ctrl-val" id="c-v">0.3</span></div>
-        <input type="range" id="c-s" min="0" max="4" step="0.05" value="0.3"
-               oninput="sv('c-v',this.value);schedule()">
+        <div class="ctrl-label">Damping c <span class="ctrl-val" id="c-v">0.30</span></div>
+        <input type="range" id="c-s" min="0.05" max="4" step="0.05" value="0.3"
+               oninput="document.getElementById('c-v').textContent=parseFloat(this.value).toFixed(2);schedule()">
       </div>
       <div class="ctrl-row">
         <div class="ctrl-label">Spring k (N/m) <span class="ctrl-val" id="k-v">4.0</span></div>
@@ -45,7 +45,7 @@
       </div>
       <div class="ctrl-row">
         <div class="ctrl-label">Frequency ω (rad/s) <span class="ctrl-val" id="w-v">1.00</span></div>
-        <input type="range" id="w-s" min="0.1" max="6" step="0.05" value="1.0"
+        <input type="range" id="w-s" min="0.1" max="8" step="0.05" value="1.0"
                oninput="document.getElementById('w-v').textContent=parseFloat(this.value).toFixed(2);schedule()">
       </div>
 
@@ -112,6 +112,10 @@ function build() {
 
   // System quantities
   const wn=Math.sqrt(k/m);
+  // Dynamically extend ω slider so resonance is always reachable
+  const wSlider=document.getElementById('w-s');
+  const neededMax=Math.ceil(wn*2.2*10)/10;
+  if(neededMax>parseFloat(wSlider.max)) wSlider.max=neededMax;
   const zeta=c/(2*Math.sqrt(m*k));
   const wr=zeta<1/Math.sqrt(2) ? wn*Math.sqrt(1-2*zeta*zeta) : null;
   const amp=F/Math.sqrt((k-m*w*w)**2+(c*w)**2);
@@ -155,11 +159,13 @@ function build() {
      line:{color:'#D44848',width:1.5,dash:'dot'}});
   }
 
+  const finiteGain=gain.filter(isFinite);
+  const gainMax=finiteGain.length>0?Math.max(...finiteGain):1;
   Plotly.react('gain-plot',gainTraces,{
     ...BASE,
     title:{text:'Steady-State Amplitude G(ω) — drag ω slider to sweep',font:{size:13}},
     xaxis:{title:'ω (rad/s)',...AX},
-    yaxis:{title:'Amplitude',...AX},
+    yaxis:{title:'Amplitude',range:[0,gainMax*1.1],...AX},
     showlegend:true,
     legend:{x:0.99,xanchor:'right',y:0.99,bgcolor:'rgba(12,26,48,0.8)',
             bordercolor:'#1A304D',borderwidth:1,font:{size:11}},

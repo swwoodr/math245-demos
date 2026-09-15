@@ -264,7 +264,7 @@ function build() {
   ],{
     ...BASE,
     margin:{l:44,r:10,t:30,b:36},
-    title:{text:'Phase Portrait (θ₁ vs θ₂)',font:{size:13}},
+    title:{text:'Configuration Space (θ₁ vs θ₂)',font:{size:13}},
     xaxis:{title:{text:'θ₁ (°)',font:{size:11}},...AXIS},
     yaxis:{title:{text:'θ₂ (°)',font:{size:11}},...AXIS},
   },CFG);
@@ -281,17 +281,18 @@ function drawChaos() {
   const {Y:Yp}=rk4(ode,[th1_0,0,th2_0+DEG,0],T,600);
   const x2p=Yp.map((y,i)=>L1*Math.sin(y[0])+L2*Math.sin(y[2]));
   const y2p=Yp.map((y,i)=>-L1*Math.cos(y[0])-L2*Math.cos(y[2]));
-  const dist=t.map((_,i)=>Math.hypot(x2[i]-x2p[i],y2[i]-y2p[i]));
+  const distRaw=t.map((_,i)=>Math.hypot(x2[i]-x2p[i],y2[i]-y2p[i]));
+  // Replace zero/near-zero values with null so log scale doesn't break
+  const dist=distRaw.map(d=>d>1e-10?d:null);
 
   Plotly.react('chaos-plot',[
-    {x:t,y:dist,mode:'lines',fill:'tozeroy',
-     fillcolor:'rgba(212,72,72,0.12)',line:{color:'#D44848',width:2}},
+    {x:t,y:dist,mode:'lines',line:{color:'#D44848',width:2}},
   ],{
     ...BASE,
-    margin:{l:50,r:10,t:10,b:40},
-    title:{text:'Distance between trajectories (1° perturbation in θ₂)',font:{size:12}},
+    margin:{l:56,r:10,t:10,b:40},
+    title:{text:'Distance between trajectories (1° perturbation in θ₂) — log scale shows exponential growth',font:{size:11}},
     xaxis:{title:{text:'t (s)',font:{size:11}},...AXIS},
-    yaxis:{title:{text:'|Δr| (m)',font:{size:11}},...AXIS},
+    yaxis:{title:{text:'|Δr| (m)',font:{size:11}},type:'log',exponentformat:'power',...AXIS},
   },CFG);
 }
 
