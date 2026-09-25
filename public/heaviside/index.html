@@ -28,7 +28,9 @@
           <option value="custom">— custom —</option>
           <option value="on_off">Force on, then off</option>
           <option value="pulse">Short pulse (on then off)</option>
-          <option value="impulse">Impulse (Dirac δ approximation)</option>
+          <option value="impulse">Single impulse (hammer blow)</option>
+          <option value="hammer">Repeated hammer blows</option>
+          <option value="cancel">Second impulse stops the motion</option>
           <option value="resonance">Lightly damped: ringing at each switch</option>
           <option value="ramp">Step into b = 0 system: ramp output</option>
         </select>
@@ -79,23 +81,14 @@
                oninput="sv('t2-v',this.value,2); setCustom(); schedule()">
       </div>
 
-      <div class="ctrl-section">Impulse (Dirac δ)</div>
+      <div class="ctrl-section">Impulses (Dirac δ)</div>
+      <div id="imp-list"></div>
       <div class="ctrl-row">
-        <label class="radio-option">
-          <input type="checkbox" id="use-impulse" onchange="setCustom(); schedule()">
-          Add impulse at t₃
-        </label>
+        <button class="btn" id="add-imp" style="width:100%; padding:0.4rem; font-size:0.85rem;" onclick="addImpulse()">+ Add impulse</button>
       </div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Impulse time t₃ <span class="ctrl-val" id="t3-v">10.00</span></div>
-        <input type="range" id="t3-s" min="0" max="20" step="0.25" value="10"
-               oninput="sv('t3-v',this.value,2); setCustom(); schedule()">
-      </div>
-      <div class="ctrl-row">
-        <div class="ctrl-label">Impulse magnitude <span class="ctrl-val" id="Fd-v">3.00</span></div>
-        <input type="range" id="Fd-s" min="-10" max="10" step="0.5" value="3"
-               oninput="sv('Fd-v',this.value,2); setCustom(); schedule()">
-      </div>
+      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 0.75rem;line-height:1.5;">
+        An impulse of strength $F$ at time $t_k$ adds $F\,\delta(t - t_k)$ to $g(t)$: it changes $y'$ instantly by $F$.
+      </p>
 
       <div class="ctrl-row">
         <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">20</span></div>
@@ -116,6 +109,12 @@
   </div>
 </div>
 
+<style>
+.imp-row { border:1px solid var(--glass-border); border-radius:8px; padding:0.5rem 0.6rem 0.1rem; margin-bottom:0.5rem; background:rgba(255,255,255,0.03); }
+.imp-head { display:flex; justify-content:space-between; align-items:center; font-size:0.8rem; font-weight:600; color:#f46f7b; margin-bottom:0.3rem; }
+.imp-del { background:none; border:1px solid var(--glass-border); color:var(--muted); border-radius:5px; cursor:pointer; font-size:0.75rem; padding:0.05rem 0.4rem; }
+.imp-del:hover { color:#fca5a5; border-color:#fca5a5; }
+</style>
 <script>
 let scheduledRaf=null;
 function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
@@ -127,12 +126,52 @@ document.getElementById('use-t2').addEventListener('change',function(){
 });
 
 const SCENARIOS = {
-  on_off: {a:0.5,b:4,y0:0,yp0:0,t1:2,F1:1,useT2:true,t2:12,useImpulse:false,t3:15,Fd:3,T:20},
-  pulse: {a:0.3,b:9,y0:0,yp0:0,t1:2,F1:5,useT2:true,t2:4,useImpulse:false,t3:10,Fd:3,T:20},
-  impulse: {a:0.4,b:4,y0:0,yp0:0,t1:0,F1:0,useT2:false,t2:8,useImpulse:true,t3:5,Fd:8,T:20},
-  resonance: {a:0.1,b:4,y0:0,yp0:0,t1:1,F1:1,useT2:true,t2:15,useImpulse:false,t3:10,Fd:3,T:20},
-  ramp: {a:1,b:0,y0:0,yp0:0,t1:2,F1:1,useT2:false,t2:8,useImpulse:false,t3:10,Fd:3,T:15},
+  on_off:    {a:0.5,b:4,y0:0,yp0:0,t1:2,F1:1,useT2:true,t2:12,imps:[],T:20},
+  pulse:     {a:0.3,b:9,y0:0,yp0:0,t1:2,F1:5,useT2:true,t2:4,imps:[],T:20},
+  impulse:   {a:0.4,b:4,y0:0,yp0:0,t1:0,F1:0,useT2:false,t2:8,imps:[{t:5,F:8}],T:20},
+  hammer:    {a:0.3,b:4,y0:0,yp0:0,t1:0,F1:0,useT2:false,t2:8,imps:[{t:2,F:2},{t:6,F:2},{t:10,F:2},{t:14,F:2}],T:25},
+  // y'' + 4y = 2δ(t − 1) + 2δ(t − 1 − π/2): the second blow arrives half a period later and cancels the motion
+  cancel:    {a:0,b:4,y0:0,yp0:0,t1:0,F1:0,useT2:false,t2:8,imps:[{t:1,F:2},{t:1+Math.PI/2,F:2}],T:12},
+  resonance: {a:0.1,b:4,y0:0,yp0:0,t1:1,F1:1,useT2:true,t2:15,imps:[],T:20},
+  ramp:      {a:1,b:0,y0:0,yp0:0,t1:2,F1:1,useT2:false,t2:8,imps:[],T:15},
 };
+const MAX_IMPULSES = 8;
+let IMPULSES = [];
+
+function renderImpulses(){
+  const list = document.getElementById('imp-list');
+  list.innerHTML = IMPULSES.map((p, i) => `
+    <div class="imp-row">
+      <div class="imp-head">δ<sub>${i+1}</sub> <button class="imp-del" title="Remove this impulse" onclick="removeImpulse(${i})">✕</button></div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time t <span class="ctrl-val" id="imp-t-v-${i}">${p.t.toFixed(2)}</span></div>
+        <input type="range" id="imp-t-${i}" min="0" max="40" step="any" value="${p.t}" oninput="setImpulse(${i},'t',this.value)">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Strength F <span class="ctrl-val" id="imp-F-v-${i}">${p.F.toFixed(2)}</span></div>
+        <input type="range" id="imp-F-${i}" min="-10" max="10" step="0.5" value="${p.F}" oninput="setImpulse(${i},'F',this.value)">
+      </div>
+    </div>`).join('');
+  const add = document.getElementById('add-imp');
+  add.disabled = IMPULSES.length >= MAX_IMPULSES;
+  add.textContent = IMPULSES.length >= MAX_IMPULSES ? `Maximum of ${MAX_IMPULSES} impulses` : '+ Add impulse';
+}
+function setImpulse(i, key, val){
+  IMPULSES[i][key] = +val;
+  sv(`imp-${key}-v-${i}`, val, 2);
+  setCustom(); schedule();
+}
+function addImpulse(){
+  if (IMPULSES.length >= MAX_IMPULSES) return;
+  const T = +document.getElementById('T-s').value;
+  const last = IMPULSES.length ? Math.max(...IMPULSES.map(p => p.t)) : 0;
+  IMPULSES.push({t: Math.min(IMPULSES.length ? last + 2 : T/4, T), F: 3});
+  renderImpulses(); setCustom(); schedule();
+}
+function removeImpulse(i){
+  IMPULSES.splice(i, 1);
+  renderImpulses(); setCustom(); schedule();
+}
 
 function loadScenario(){
   const s=document.getElementById('scenario-sel').value;
@@ -140,14 +179,15 @@ function loadScenario(){
   const p=SCENARIOS[s];
   const set=(id,val)=>{document.getElementById(id+'-s').value=val;};
   set('a',p.a);set('b',p.b);set('y0',p.y0);set('yp0',p.yp0);
-  set('t1',p.t1);set('F1',p.F1);set('t2',p.t2);set('t3',p.t3);set('Fd',p.Fd);set('T',p.T);
+  set('t1',p.t1);set('F1',p.F1);set('t2',p.t2);set('T',p.T);
   document.getElementById('use-t2').checked=p.useT2;
-  document.getElementById('use-impulse').checked=p.useImpulse;
   document.getElementById('t2-row').style.display=p.useT2?'block':'none';
-  ['a','b','y0','yp0','t1','F1','t2','t3','Fd','T'].forEach(id=>{
+  ['a','b','y0','yp0','t1','F1','t2','T'].forEach(id=>{
     const el=document.getElementById(id+'-s');
     sv(id+'-v',el.value,id==='T'?0:2);
   });
+  IMPULSES = p.imps.map(q => ({...q}));
+  renderImpulses();
   schedule();
 }
 
@@ -170,36 +210,34 @@ function build(){
   const F1=+document.getElementById('F1-s').value;
   const useT2=document.getElementById('use-t2').checked;
   const t2=+document.getElementById('t2-s').value;
-  const useImpulse=document.getElementById('use-impulse').checked;
-  const t3=+document.getElementById('t3-s').value;
-  const Fd=+document.getElementById('Fd-s').value;
   const tMax=+document.getElementById('T-s').value;
 
-  // Impulse approximated as a tall, narrow rectangle of width ε and area Fd
-  const eps=0.05;
-
+  // Step (Heaviside) part of the forcing
   const g=t=>{
     let val=0;
     if(t>=t1) val+=F1;
     if(useT2&&t>=t2) val-=F1;
-    if(useImpulse&&t>=t3&&t<t3+eps) val+=Fd/eps;
     return val;
   };
+  // Impulses: F·δ(t − t_k) makes y' jump by exactly F at t_k
+  const imps = IMPULSES.map((p, i) => ({...p, n: i + 1})).filter(p => Math.abs(p.F) > 1e-9 && p.t <= tMax).sort((p, q) => p.t - q.t);
 
-  // Solve
+  // Solve with RK4, stopping exactly at each impulse time to apply the jump
   const h=0.01;
-  const Nt=Math.round(tMax/h);
   const ts=[0],ys=[y0],gts=[g(0)];
-  let y=y0,yp=yp0;
-  for(let i=0;i<Nt;i++){
-    const t=i*h;
-    [y,yp]=rk4(a,b,g,t,y,yp,h);
-    ts.push(t+h); ys.push(isFinite(y)?y:NaN); gts.push(g(t+h));
+  let y=y0,yp=yp0,t=0,k=0;
+  while(t<tMax-1e-12){
+    while(k<imps.length&&imps[k].t<=t+1e-12){ yp+=imps[k].F; k++; }
+    let tn=Math.min(t+h,tMax);
+    if(k<imps.length&&imps[k].t<tn) tn=imps[k].t;
+    [y,yp]=rk4(a,b,g,t,y,yp,tn-t);
+    t=tn;
+    ts.push(t); ys.push(isFinite(y)?y:NaN); gts.push(g(t));
   }
 
   // ── Compute data ranges for axis/shape extents ───────────────────────────────
   const finiteG=gts.filter(isFinite), finiteY=ys.filter(isFinite);
-  const gMin=Math.min(...finiteG), gMax=Math.max(...finiteG);
+  const gMin=Math.min(...finiteG, ...imps.map(p=>p.F), 0), gMax=Math.max(...finiteG, ...imps.map(p=>p.F), 0);
   const yMin=Math.min(...finiteY), yMax=Math.max(...finiteY);
   const gPad=Math.max(0.2,(gMax-gMin)*0.2);
   const yPad=Math.max(0.05,(yMax-yMin)*0.15);
@@ -209,12 +247,17 @@ function build(){
 
   // ── Forcing plot ─────────────────────────────────────────────────────────────
   const switchTimes=[];
-  if(t1>=0&&t1<=tMax)switchTimes.push({t:t1,label:`t₁=${t1}`});
-  if(useT2&&t2>=0&&t2<=tMax)switchTimes.push({t:t2,label:`t₂=${t2}`});
-  if(useImpulse&&t3>=0&&t3<=tMax)switchTimes.push({t:t3,label:`t₃=${t3} (δ)`});
+  const hasStep=Math.abs(F1)>0.001;
+  if(hasStep&&t1>=0&&t1<=tMax)switchTimes.push({t:t1,label:`t₁=${t1}`});
+  if(hasStep&&useT2&&t2>=0&&t2<=tMax)switchTimes.push({t:t2,label:`t₂=${t2}`});
+  imps.forEach(p=>switchTimes.push({t:p.t,label:`δ${'₁₂₃₄₅₆₇₈'[p.n-1]}`,imp:true}));
 
   const fTraces=[{x:ts,y:gts,mode:'lines',line:{color:'#f0a500',width:2},name:'g(t)'}];
-  const fAnnotations=switchTimes.map(sw=>({
+  const impArrows=imps.map(p=>({x:p.t,y:p.F,ax:p.t,ay:0,xref:'x',yref:'y',axref:'x',ayref:'y',
+    showarrow:true,arrowhead:2,arrowsize:1.2,arrowwidth:2.5,arrowcolor:'#f46f7b',text:''}));
+  const impLabels=imps.map(p=>({x:p.t,y:p.F,xref:'x',yref:'y',text:`${parseFloat(p.F.toFixed(2))}δ`,showarrow:false,
+    yanchor:p.F>0?'bottom':'top',font:{color:'#f46f7b',size:10}}));
+  const fAnnotations=switchTimes.filter(sw=>!sw.imp).map(sw=>({
     x:sw.t,y:gLo,xref:'x',yref:'y',
     text:sw.label,font:{color:'rgba(240,165,0,0.7)',size:9},
     showarrow:true,arrowhead:3,arrowcolor:'rgba(240,165,0,0.5)',arrowsize:0.7,ax:0,ay:-20,
@@ -227,8 +270,8 @@ function build(){
     xaxis:{range:[0,tMax],gridcolor:'rgba(255,255,255,0.06)',title:''},
     yaxis:{range:[gLo,gHi],title:'g(t)',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:false,
-    annotations:fAnnotations,
-    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:gLo,y1:gHi,line:{color:'rgba(240,165,0,0.3)',width:1,dash:'dot'}})),
+    annotations:[...fAnnotations,...impArrows,...impLabels],
+    shapes:switchTimes.filter(sw=>!sw.imp).map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:gLo,y1:gHi,line:{color:'rgba(240,165,0,0.3)',width:1,dash:'dot'}})),
   },{responsive:true,displayModeBar:false});
 
   // ── Solution plot ─────────────────────────────────────────────────────────────
@@ -240,8 +283,8 @@ function build(){
     xaxis:{range:[0,tMax],title:'t',gridcolor:'rgba(255,255,255,0.06)'},
     yaxis:{range:[yLo,yHi],title:'y(t)',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:false,
-    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:yLo,y1:yHi,line:{color:'rgba(240,165,0,0.25)',width:1,dash:'dot'}})),
-    annotations:switchTimes.map(sw=>({x:sw.t,y:yLabelY,xref:'x',yref:'y',text:sw.label,font:{color:'rgba(240,165,0,0.6)',size:9},showarrow:false,xshift:5})),
+    shapes:switchTimes.map(sw=>({type:'line',x0:sw.t,x1:sw.t,y0:yLo,y1:yHi,line:{color:sw.imp?'rgba(244,111,123,0.35)':'rgba(240,165,0,0.25)',width:1,dash:'dot'}})),
+    annotations:switchTimes.map(sw=>({x:sw.t,y:yLabelY,xref:'x',yref:'y',text:sw.label,font:{color:sw.imp?'rgba(244,111,123,0.8)':'rgba(240,165,0,0.6)',size:9},showarrow:false,xshift:5})),
   },{responsive:true,displayModeBar:false});
 
   // Laplace representation, with signs combined the way a textbook writes them
@@ -250,18 +293,20 @@ function build(){
     if (!terms.length) return '0';
     return terms.map(([c, body], i) => {
       const mag = n1(Math.abs(c)), sign = c < 0 ? '-' : '+';
+      if (body === '1') return (i === 0 ? (c < 0 ? '-' : '') : ` ${sign} `) + mag;
       return (i === 0 ? (c < 0 ? '-' : '') : ` ${sign} `) + (mag === '1' ? '' : mag + '\\,') + body;
     }).join('');
   };
   const u = tt => +tt === 0 ? 'u(t)' : `u(t-${n1(tt)})`;
   const dlt = tt => +tt === 0 ? '\\delta(t)' : `\\delta(t-${n1(tt)})`;
-  const shiftS = (tt, base) => +tt === 0 ? base : `${base}\\,e^{-${n1(tt)}s}`;
+  const eS = tt => `e^{-${n1(tt) === '1' ? '' : n1(tt)}s}`;
+  const shiftS = (tt, base) => +tt === 0 ? base : `${base}\\,${eS(tt)}`;
   const tT = [], sT = [];
   if (Math.abs(F1) > 0.001) {
     tT.push([F1, u(t1)]); sT.push([F1, shiftS(t1, '\\frac{1}{s}')]);
     if (useT2) { tT.push([-F1, u(t2)]); sT.push([-F1, shiftS(t2, '\\frac{1}{s}')]); }
   }
-  if (useImpulse && Math.abs(Fd) > 0.001) { tT.push([Fd, dlt(t3)]); sT.push([Fd, +t3 === 0 ? '1' : `e^{-${n1(t3)}s}`]); }
+  for (const p of imps) { tT.push([p.F, dlt(p.t)]); sT.push([p.F, +n1(p.t) === 0 ? '1' : eS(p.t)]); }
   const gLaplace = `g(t) = ${joinTerms(tT)}`;
   const gS = `G(s) = ${joinTerms(sT)}`;
 
