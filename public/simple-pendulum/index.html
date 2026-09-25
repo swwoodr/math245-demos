@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Pendulum</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .top-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.5fr); gap:1rem; }
+    @media (max-width: 900px) { .top-grid { grid-template-columns:1fr; } }
+    .anim-box { display:flex; flex-direction:column; align-items:center; gap:0.5rem; }
+    #pend-svg { width:100%; max-width:300px; height:auto; display:block; }
+    .anim-bar { display:flex; gap:0.5rem; align-items:center; justify-content:center; flex-wrap:wrap; }
+    .anim-bar .btn { padding:0.35rem 0.9rem; font-size:0.85rem; }
+    .anim-time { font-family:monospace; font-size:0.85rem; color:var(--muted); min-width:5.5rem; text-align:center; }
+    .anim-key { display:flex; gap:1rem; font-size:0.78rem; color:var(--muted); flex-wrap:wrap; justify-content:center; }
+    .anim-key span::before { content:''; display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
+    .key-true::before { background:#f0a500; }
+    .key-lin::before  { background:rgba(77,159,255,0.35); border:1.5px solid #4d9fff; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Simple Pendulum</h1>
+  <p class="demo-eq">$\theta'' + c\,\theta' + \dfrac{g}{L}\sin\theta = 0, \quad \theta(0)=\theta_0,\ \theta'(0)=0$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Pendulum</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Length L (m) <span class="ctrl-val" id="L-v">1.00</span></div>
+        <input type="range" id="L-s" min="0.25" max="3" step="0.05" value="1"
+               oninput="sv('L-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Damping c (1/s) <span class="ctrl-val" id="c-v">0.00</span></div>
+        <input type="range" id="c-s" min="0" max="1" step="0.02" value="0"
+               oninput="sv('c-v',this.value,2); schedule()">
+      </div>
+
+      <div class="ctrl-section">Initial Condition</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Release angle θ₀ (°) <span class="ctrl-val" id="th0-v">30</span></div>
+        <input type="range" id="th0-s" min="1" max="175" step="1" value="30"
+               oninput="sv('th0-v',this.value,0); schedule()">
+      </div>
+
+      <div class="ctrl-section">Time</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Span T (s) <span class="ctrl-val" id="T-v">12</span></div>
+        <input type="range" id="T-s" min="5" max="30" step="1" value="12"
+               oninput="sv('T-v',this.value,0); schedule()">
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option">
+          <input type="checkbox" id="show-lin" checked onchange="build()">
+          Show small-angle solution
+        </label>
+      </div>
+
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="top-grid">
+        <div class="plot-box anim-box">
+          <svg id="pend-svg" viewBox="-1.3 -1.3 2.6 2.6" aria-label="Pendulum animation">
+            <line x1="0" y1="0" x2="0" y2="1.2" stroke="rgba(135,150,196,0.35)"
+                  stroke-width="0.008" stroke-dasharray="0.04 0.04"/>
+            <g id="lin-g">
+              <line id="lin-rod" x1="0" y1="0" x2="0" y2="1"
+                    stroke="rgba(77,159,255,0.5)" stroke-width="0.015"/>
+              <circle id="lin-bob" cx="0" cy="1" r="0.09"
+                      fill="rgba(77,159,255,0.3)" stroke="#4d9fff" stroke-width="0.015"/>
+            </g>
+            <line id="nl-rod" x1="0" y1="0" x2="0" y2="1" stroke="#e8edf8" stroke-width="0.025"/>
+            <circle id="nl-bob" cx="0" cy="1" r="0.1" fill="#f0a500" stroke="white" stroke-width="0.015"/>
+            <circle cx="0" cy="0" r="0.035" fill="#e8edf8"/>
+          </svg>
+          <div class="anim-key">
+            <span class="key-true">True (nonlinear)</span>
+            <span class="key-lin" id="key-lin">Small-angle</span>
+          </div>
+          <div class="anim-bar">
+            <button class="btn" id="play-btn" onclick="togglePlay()">⏸ Pause</button>
+            <button class="btn" onclick="restart()">↺ Restart</button>
+            <span class="anim-time" id="anim-time">t = 0.00 s</span>
+          </div>
+        </div>
+
+        <div class="plot-box">
+          <div id="ts-plot" style="height:330px;"></div>
+        </div>
+      </div>
+
+      <div class="plot-box">
+        <div id="period-plot" style="height:250px;"></div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Natural freq. ω₀</div><div class="metric-value" id="m-w0">—</div></div>
+        <div class="metric"><div class="metric-label">Small-angle period T₀</div><div class="metric-value" id="m-T0">—</div></div>
+        <div class="metric"><div class="metric-label">True period T (c = 0)</div><div class="metric-value" id="m-T">—</div></div>
+        <div class="metric"><div class="metric-label">T₀ underestimates by</div><div class="metric-value plain" id="m-err">—</div></div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 The small-angle approximation</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            For small angles, $\sin\theta \approx \theta$, which turns the pendulum equation into a
+            linear, constant-coefficient second-order ODE — the same form as a spring-mass-damper:
+          </p>
+          <p>$$\theta'' + c\,\theta' + \omega_0^2\,\theta = 0, \qquad \omega_0 = \sqrt{g/L}.$$</p>
+          <p>
+            With $c = 0$ its solution is $\theta(t) = \theta_0\cos(\omega_0 t)$, with period
+            $T_0 = 2\pi\sqrt{L/g}$ — the same for every release angle.
+          </p>
+          <p>
+            The true (nonlinear) period does depend on amplitude:
+          </p>
+          <p>$$T = 4\sqrt{\tfrac{L}{g}}\;K\!\left(\sin\tfrac{\theta_0}{2}\right) \approx T_0\left(1 + \tfrac{\theta_0^2}{16}\right),$$</p>
+          <p>
+            where $K$ is the complete elliptic integral of the first kind. The linear model is within
+            1% up to about $\theta_0 \approx 23^\circ$; as $\theta_0 \to 180^\circ$ the period grows
+            without bound. Watch the two pendulums drift out of phase at large angles.
+          </p>
+          <p>
+            For the full phase portrait (including rotating solutions and the separatrix), see the
+            <a href="/pendulum-phase/" style="color:var(--blue-bright);">Pendulum Phase Plane</a> demo.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const G = 9.81, DT = 0.005, DEG = Math.PI/180;
+
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:52, r:16, t:32, b:44}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+const LEGEND = {bgcolor:'rgba(12,26,48,0.8)', bordercolor:'#1A304D', borderwidth:1, font:{size:11}};
+
+function sv(id, v, dec) { document.getElementById(id).textContent = parseFloat(v).toFixed(dec); }
+function g(id) { return parseFloat(document.getElementById(id).value); }
+
+// RK4 for θ'' = accel(θ, θ'), starting from rest; returns θ at every DT
+function integrate(accel, th0, T) {
+  const n = Math.round(T/DT), th = new Float64Array(n+1);
+  let x = th0, v = 0;
+  th[0] = x;
+  for (let i = 1; i <= n; i++) {
+    const k1x = v,              k1v = accel(x, v);
+    const k2x = v + DT/2*k1v,   k2v = accel(x + DT/2*k1x, v + DT/2*k1v);
+    const k3x = v + DT/2*k2v,   k3v = accel(x + DT/2*k2x, v + DT/2*k2v);
+    const k4x = v + DT*k3v,     k4v = accel(x + DT*k3x,   v + DT*k3v);
+    x += DT/6*(k1x + 2*k2x + 2*k3x + k4x);
+    v += DT/6*(k1v + 2*k2v + 2*k3v + k4v);
+    th[i] = x;
+  }
+  return th;
+}
+
+// T/T₀ = 2K(k)/π with k = sin(θ₀/2); K via the arithmetic-geometric mean
+function periodRatio(th0) {
+  let a = 1, b = Math.cos(th0/2);
+  for (let i = 0; i < 40 && Math.abs(a-b) > 1e-15; i++) { const an = (a+b)/2; b = Math.sqrt(a*b); a = an; }
+  return 1/a;
+}
+
+let sim = null;
+
+function build() {
+  const L = g('L-s'), c = g('c-s'), th0 = g('th0-s')*DEG, T = g('T-s');
+  const showLin = document.getElementById('show-lin').checked;
+  const w0sq = G/L, w0 = Math.sqrt(w0sq);
+
+  const thN = integrate((x,v) => -c*v - w0sq*Math.sin(x), th0, T);
+  const thL = integrate((x,v) => -c*v - w0sq*x,           th0, T);
+  sim = {T, n: thN.length-1, thN, thL, showLin};
+
+  // ── θ(t) plot (every 4th sample is plenty for display) ──
+  const ts=[], yN=[], yL=[];
+  for (let i = 0; i <= sim.n; i += 4) { ts.push(i*DT); yN.push(thN[i]/DEG); yL.push(thL[i]/DEG); }
+  const traces = [];
+  if (showLin) traces.push({x:ts, y:yL, mode:'lines', name:'Small-angle: sin θ ≈ θ',
+                            line:{color:'#4d9fff', width:2, dash:'dash'}});
+  traces.push({x:ts, y:yN, mode:'lines', name:'True: sin θ', line:{color:'#f0a500', width:2.5}});
+
+  Plotly.react('ts-plot', traces, {
+    ...BASE, showlegend:true,
+    title:{text:'θ(t): nonlinear vs. linearized', font:{size:13}},
+    legend:{...LEGEND, orientation:'h', x:0, y:-0.2},
+    margin:{l:52, r:16, t:32, b:70},
+    xaxis:{title:'t (s)', range:[0, T], ...AX},
+    yaxis:{title:'θ (°)', ...AX},
+    shapes:[{type:'line', xref:'x', yref:'paper', x0:0, x1:0, y0:0, y1:1,
+             line:{color:'rgba(232,237,248,0.45)', width:1}}],
+  }, CFG);
+
+  // ── Period vs amplitude ──
+  const amps=[], ratios=[];
+  for (let d = 0; d <= 175; d += 0.5) { amps.push(d); ratios.push(periodRatio(d*DEG)); }
+  const r = periodRatio(th0);
+  Plotly.react('period-plot', [
+    {x:[0,175], y:[1,1], mode:'lines', name:'Small-angle model: T = T₀',
+     line:{color:'#4d9fff', width:1.5, dash:'dash'}},
+    {x:amps, y:ratios, mode:'lines', name:'True period', line:{color:'#f0a500', width:2.5}},
+    {x:[th0/DEG], y:[r], mode:'markers', name:`θ₀ = ${(th0/DEG).toFixed(0)}°`,
+     marker:{color:'#f0a500', size:11, symbol:'diamond', line:{color:'white', width:1.5}}},
+  ], {
+    ...BASE, showlegend:true,
+    title:{text:'Period grows with release angle', font:{size:13}},
+    legend:{...LEGEND, x:0.01, y:0.98},
+    xaxis:{title:'Release angle θ₀ (°)', range:[0,175], ...AX},
+    yaxis:{title:'T / T₀', range:[0.95, Math.max(2, r*1.08)], ...AX},
+  }, CFG);
+
+  // ── Metrics ──
+  const T0 = 2*Math.PI/w0;
+  document.getElementById('m-w0').textContent  = w0.toFixed(3)+' rad/s';
+  document.getElementById('m-T0').textContent  = T0.toFixed(3)+' s';
+  document.getElementById('m-T').textContent   = (T0*r).toFixed(3)+' s';
+  document.getElementById('m-err').textContent = ((r-1)*100).toFixed(r < 1.01 ? 2 : 1)+' %';
+
+  document.getElementById('lin-g').style.display  = showLin ? '' : 'none';
+  document.getElementById('key-lin').style.display = showLin ? '' : 'none';
+
+  simTime = 0;
+  lastCursor = -1;
+  drawPend();
+  if (!playing) updateBtn();
+}
+
+// ── Animation ────────────────────────────────────────────────────────────────
+let playing = false, simTime = 0, lastTs = null, lastCursor = -1, loopGen = 0;
+
+function placeBob(rodId, bobId, th) {
+  const x = Math.sin(th), y = Math.cos(th);
+  const rod = document.getElementById(rodId), bob = document.getElementById(bobId);
+  rod.setAttribute('x2', x); rod.setAttribute('y2', y);
+  bob.setAttribute('cx', x); bob.setAttribute('cy', y);
+}
+
+function drawPend() {
+  const i = Math.min(sim.n, Math.round(simTime/DT));
+  placeBob('nl-rod', 'nl-bob', sim.thN[i]);
+  if (sim.showLin) placeBob('lin-rod', 'lin-bob', sim.thL[i]);
+  document.getElementById('anim-time').textContent = `t = ${simTime.toFixed(2)} s`;
+  if (Math.abs(simTime - lastCursor) >= 0.1 || simTime >= sim.T) {
+    lastCursor = simTime;
+    Plotly.relayout('ts-plot', {'shapes[0].x0': simTime, 'shapes[0].x1': simTime});
+  }
+}
+
+function frame(ts, gen) {
+  if (!playing || gen !== loopGen) return;
+  if (lastTs !== null) simTime += (ts - lastTs)/1000;
+  lastTs = ts;
+  if (simTime >= sim.T) { simTime = sim.T; drawPend(); setPlaying(false); return; }
+  drawPend();
+  requestAnimationFrame(t => frame(t, gen));
+}
+
+function setPlaying(p) {
+  playing = p;
+  if (p) {
+    if (simTime >= sim.T) simTime = 0;
+    lastTs = null;
+    const gen = ++loopGen;
+    requestAnimationFrame(t => frame(t, gen));
+  }
+  updateBtn();
+}
+
+function updateBtn() {
+  document.getElementById('play-btn').textContent =
+    playing ? '⏸ Pause' : (simTime >= sim.T ? '↺ Replay' : '▶ Play');
+}
+
+function togglePlay() { setPlaying(!playing); }
+function restart() { simTime = 0; lastCursor = -1; drawPend(); if (!playing) setPlaying(true); }
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrow = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrow.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 80); }
+window.addEventListener('load', () => { build(); setPlaying(true); });
+</script>
+</body>
+</html>
