@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Linear Systems x′ = Ax</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .mat-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 0.75rem; }
+    .mat-tex { text-align:center; margin:0.25rem 0 0.75rem; min-height:3rem; }
+    .small-btn { width:100%; padding:0.4rem; font-size:0.85rem; background:rgba(255,255,255,0.06);
+                 border:1px solid var(--glass-border); border-radius:6px; color:var(--white); cursor:pointer; }
+    .small-btn:hover { background:rgba(77,159,255,0.18); }
+    .hint { font-size:0.8rem; color:var(--muted); padding:0.3rem 0.5rem 0.2rem; }
+    #pp-plot { cursor:crosshair; }
+    .info-box { padding:0.9rem 1.1rem; line-height:1.8; font-size:0.9rem; overflow-x:auto; }
+    .info-box h3 { font-size:0.72rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); font-weight:600; margin:0.2rem 0 0.1rem; }
+    .info-box .note { color:var(--muted); font-size:0.85rem; line-height:1.55; }
+    #scenario-desc { font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Linear Systems x′ = Ax</h1>
+  <p class="demo-eq">$\mathbf{x}' = A\mathbf{x}, \qquad \mathbf{x}(t) = e^{\lambda t}\mathbf{v}\ \text{ is a solution whenever } A\mathbf{v} = \lambda\mathbf{v}$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Preset</div>
+      <div class="ctrl-row">
+        <select id="preset-sel" onchange="loadPreset()">
+          <option value="saddle">Saddle</option>
+          <option value="sink">Nodal sink</option>
+          <option value="source">Nodal source</option>
+          <option value="spiralsink">Spiral sink</option>
+          <option value="spiralsource">Spiral source</option>
+          <option value="center">Center (x″ + 4x = 0)</option>
+          <option value="degenerate">Degenerate node (one eigenvector)</option>
+          <option value="star">Star node (A = λI)</option>
+          <option value="zero">Zero eigenvalue (line of equilibria)</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div id="scenario-desc"></div>
+      </div>
+
+      <div class="ctrl-section">Matrix A</div>
+      <div class="mat-tex" id="mat-tex"></div>
+      <div class="mat-grid">
+        <div class="ctrl-row">
+          <div class="ctrl-label">a <span class="ctrl-val" id="a-v">1.0</span></div>
+          <input type="range" id="a-s" min="-4" max="4" step="0.1" value="1" oninput="onMat()">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">b <span class="ctrl-val" id="b-v">1.0</span></div>
+          <input type="range" id="b-s" min="-4" max="4" step="0.1" value="1" oninput="onMat()">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">c <span class="ctrl-val" id="c-v">4.0</span></div>
+          <input type="range" id="c-s" min="-4" max="4" step="0.1" value="4" oninput="onMat()">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">d <span class="ctrl-val" id="d-v">1.0</span></div>
+          <input type="range" id="d-s" min="-4" max="4" step="0.1" value="1" oninput="onMat()">
+        </div>
+      </div>
+
+      <div class="ctrl-section">Time</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Span T <span class="ctrl-val" id="T-v">6</span></div>
+        <input type="range" id="T-s" min="2" max="15" step="1" value="6"
+               oninput="sv('T-v',this.value,0); schedule()">
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-field" checked onchange="build()"> Direction field</label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-eig" checked onchange="build()"> Straight-line (eigenvector) solutions</label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-samples" checked onchange="build()"> Sample trajectories</label>
+      </div>
+      <div class="ctrl-row">
+        <button class="small-btn" onclick="clearICs()">Clear my trajectories</button>
+      </div>
+
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box">
+        <div id="pp-plot" style="height:500px;"></div>
+        <div class="hint">Click anywhere in the phase plane to start a trajectory there (up to 6).</div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">λ₁</div><div class="metric-value plain" id="m-l1">—</div></div>
+        <div class="metric"><div class="metric-label">λ₂</div><div class="metric-value plain" id="m-l2">—</div></div>
+        <div class="metric"><div class="metric-label">Equilibrium type</div><div class="metric-value plain" id="m-type" style="font-size:1rem;">—</div></div>
+        <div class="metric"><div class="metric-label">Stability</div><div class="metric-value" id="m-stab" style="font-size:1rem;">—</div></div>
+      </div>
+
+      <div class="plot-box info-box">
+        <h3>General solution</h3>
+        <div id="gen-sol"></div>
+        <div id="gen-aux"></div>
+        <h3 style="margin-top:0.6rem;">Selected trajectory</h3>
+        <div id="part-sol" class="note"></div>
+      </div>
+
+      <div class="plot-box">
+        <div id="ts-plot" style="height:240px;"></div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 How eigenvectors build the solution</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            Try $\mathbf{x}(t) = e^{\lambda t}\mathbf{v}$. Then $\mathbf{x}' = \lambda e^{\lambda t}\mathbf{v}$ and
+            $A\mathbf{x} = e^{\lambda t}A\mathbf{v}$, so it is a solution exactly when $A\mathbf{v} = \lambda\mathbf{v}$.
+            These are the <strong>straight-line solutions</strong>: they stay on the eigenvector's line, moving out if
+            $\lambda > 0$ and in if $\lambda < 0$.
+          </p>
+          <p>
+            <strong>Distinct real eigenvalues:</strong> every solution is a combination
+            $\mathbf{x}(t) = c_1 e^{\lambda_1 t}\mathbf{v}_1 + c_2 e^{\lambda_2 t}\mathbf{v}_2$; the constants come from
+            $\mathbf{x}(0) = c_1\mathbf{v}_1 + c_2\mathbf{v}_2$.
+          </p>
+          <p>
+            <strong>Complex eigenvalues</strong> $\lambda = \alpha \pm \beta i$ with $\mathbf{v} = \mathbf{p} \pm i\mathbf{q}$:
+            the real and imaginary parts of $e^{\lambda t}\mathbf{v}$ give two real solutions, and
+            $e^{\alpha t}$ decides whether the orbit spirals in ($\alpha < 0$), out ($\alpha > 0$), or closes into an ellipse ($\alpha = 0$).
+          </p>
+          <p>
+            <strong>Repeated eigenvalue with one eigenvector:</strong> the second solution is
+            $e^{\lambda t}(t\,\mathbf{v} + \mathbf{w})$, where $\mathbf{w}$ solves $(A - \lambda I)\mathbf{w} = \mathbf{v}$.
+          </p>
+          <p>
+            Related demos: <a href="/eigenvectors/" style="color:var(--blue-bright);">Eigenvectors &amp; Eigenvalues</a>
+            (the geometry of $A\mathbf{v} = \lambda\mathbf{v}$) and the
+            <a href="/trdet/" style="color:var(--blue-bright);">Trace-Det Plane</a> (classifying every $A$ by $T$ and $D$).
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const EPS = 1e-9, R = 4;
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:44, r:16, t:16, b:40}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+const KX   = {throwOnError:false};
+const COLORS = ['#f0a500', '#4d9fff', '#f46f7b', '#2dd4ef', '#9b72e8', '#e8edf8'];
+
+const PRESETS = {
+  saddle:       {A:[1,1,4,1],        desc:'λ = 3 and −1: solutions come in along one eigenvector and leave along the other.'},
+  sink:         {A:[-2,1,1,-2],      desc:'λ = −1 and −3: everything decays to 0, eventually along the slower eigenvector.'},
+  source:       {A:[2,1,1,2],        desc:'λ = 3 and 1: everything grows away from 0, eventually along the faster eigenvector.'},
+  spiralsink:   {A:[-0.5,-2,2,-0.5], desc:'λ = −0.5 ± 2i: rotation from β = 2, decay from α = −0.5.'},
+  spiralsource: {A:[0.5,-2,2,0.5],   desc:'λ = 0.5 ± 2i: rotation with growth — orbits spiral outward.'},
+  center:       {A:[0,1,-4,0],       desc:'x″ + 4x = 0 written as a system (x₁ = x, x₂ = x′). λ = ±2i gives closed elliptical orbits.'},
+  degenerate:   {A:[-1,1,0,-1],      desc:'Repeated λ = −1 with only one eigenvector; the second solution needs a t·e^(λt) term.'},
+  star:         {A:[-1,0,0,-1],      desc:'A = −I: every direction is an eigenvector, so every trajectory is a straight line into 0.'},
+  zero:         {A:[-1,1,1,-1],      desc:'λ = 0 and −2: every point on the λ = 0 eigenvector line is an equilibrium.'},
+  custom:       {A:null,             desc:'Drag the entries of A.'},
+};
+
+function sv(id, v, dec) { document.getElementById(id).textContent = parseFloat(v).toFixed(dec); }
+function g(id) { return parseFloat(document.getElementById(id).value); }
+function getA() { return ['a','b','c','d'].map(k => g(k+'-s')); }
+function fmt(x, dp=2) { if (Math.abs(x) < 5e-10) x = 0; return String(parseFloat(x.toFixed(dp))); }
+function vecTex(v) { return `\\begin{pmatrix}${fmt(v[0])}\\\\${fmt(v[1])}\\end{pmatrix}`; }
+function coef(x) { const s = fmt(x); return s === '1' ? '' : s === '-1' ? '-' : s; }
+function expTex(l) { return fmt(l) === '0' ? '' : `e^{${coef(l)}t}`; }
+function pmTex(alpha, beta) {
+  const b = coef(beta);
+  return fmt(alpha) === '0' ? `\\pm ${b}i` : `${fmt(alpha)} \\pm ${b}i`;
+}
+function cplxText(re, im) {
+  const r = fmt(re), i = fmt(Math.abs(im));
+  return (r === '0' ? '' : r) + (im < 0 ? '−' : (r === '0' ? '' : '+')) + (i === '1' ? '' : i) + 'i';
+}
+function tex(el, s, display=true) { document.getElementById(el).innerHTML = katex.renderToString(s, {...KX, displayMode:display}); }
+
+// ── Eigen analysis ────────────────────────────────────────────────────────────
+// Textbook-style scaling: integer components when possible (e.g. (1, -2)), first nonzero entry positive
+function normMax(v) {
+  const k = Math.abs(v[0]) >= Math.abs(v[1]) ? 0 : 1;
+  if (Math.abs(v[k]) < EPS) return null;
+  let best = [v[0]/v[k], v[1]/v[k]];
+  const isInt = x => Math.abs(x - Math.round(x)) < 1e-9;
+  for (const j of [0, 1]) {
+    if (Math.abs(v[j]) < EPS) continue;
+    const w = [v[0]/v[j], v[1]/v[j]];
+    if (isInt(w[0]) && isInt(w[1]) && Math.max(...w.map(Math.abs)) <= 10) { best = w; break; }
+  }
+  const lead = Math.abs(best[0]) > EPS ? best[0] : best[1];
+  return lead < 0 ? [-best[0], -best[1]] : best;
+}
+function eigvec(a, b, c, d, l) {
+  const r1 = [b, l-a], r2 = [l-d, c];
+  const n1 = Math.hypot(...r1), n2 = Math.hypot(...r2);
+  if (n1 < 1e-7 && n2 < 1e-7) return null;
+  return normMax(n1 >= n2 ? r1 : r2);
+}
+function eig2(a, b, c, d) {
+  const T = a+d, D = a*d-b*c, disc = T*T-4*D, tol = 1e-9*Math.max(1, T*T);
+  if (disc > tol) {
+    const s = Math.sqrt(disc), l1 = (T+s)/2, l2 = (T-s)/2;
+    return {T, D, type:'real', l1, l2, v1:eigvec(a,b,c,d,l1), v2:eigvec(a,b,c,d,l2)};
+  }
+  if (disc < -tol) {
+    const alpha = T/2, beta = Math.sqrt(-disc)/2;
+    return {T, D, type:'complex', alpha, beta, p:[1, (alpha-a)/b], q:[0, beta/b]};
+  }
+  const l = T/2, v = eigvec(a,b,c,d,l);
+  if (!v) return {T, D, type:'scalar', l1:l, l2:l};
+  // Generalized eigenvector: (A − λI) w = v, using the larger row of the rank-1 matrix
+  const n11 = a-l, n12 = b, n21 = c, n22 = d-l;
+  let w;
+  if (Math.hypot(n11, n12) >= Math.hypot(n21, n22))
+    w = Math.abs(n12) >= Math.abs(n11) ? [0, v[0]/n12] : [v[0]/n11, 0];
+  else
+    w = Math.abs(n22) >= Math.abs(n21) ? [0, v[1]/n22] : [v[1]/n21, 0];
+  return {T, D, type:'repeated', l1:l, l2:l, v1:v, w};
+}
+
+function classify(E, c) {
+  const tol = 1e-9, T = E.T, D = E.D;
+  const S = {name:'', stab:'', color:''};
+  const set = (name, stab) => {
+    S.name = name; S.stab = stab;
+    S.color = stab.startsWith('Asymptotically') ? 'var(--success)' : stab.startsWith('Unstable') ? '#f46f7b' : 'var(--gold-light)';
+  };
+  const turn = c > 0 ? 'counterclockwise' : 'clockwise';
+  if (D < -tol) set('Saddle point', 'Unstable');
+  else if (Math.abs(D) <= tol) set(Math.abs(T) <= tol ? 'Degenerate (λ = 0 twice)' : 'Line of equilibria',
+                                   T < -tol ? 'Stable, not asymptotically' : 'Unstable');
+  else if (E.type === 'complex') {
+    if (Math.abs(T) <= tol) set(`Center (${turn})`, 'Stable, not asymptotically');
+    else set(`${T < 0 ? 'Spiral sink' : 'Spiral source'} (${turn})`, T < 0 ? 'Asymptotically stable' : 'Unstable');
+  }
+  else if (E.type === 'real') set(T < 0 ? 'Nodal sink' : 'Nodal source', T < 0 ? 'Asymptotically stable' : 'Unstable');
+  else if (E.type === 'scalar') set(T < 0 ? 'Star sink' : 'Star source', T < 0 ? 'Asymptotically stable' : 'Unstable');
+  else set(T < 0 ? 'Degenerate sink' : 'Degenerate source', T < 0 ? 'Asymptotically stable' : 'Unstable');
+  return S;
+}
+
+// Basis used for x(0) = c1*u + c2*w in each case
+function basis(E) {
+  if (E.type === 'real') return [E.v1, E.v2];
+  if (E.type === 'complex') return [E.p, E.q];
+  if (E.type === 'repeated') return [E.v1, E.w];
+  return [[1,0],[0,1]];
+}
+function coeffs(E, x0, y0) {
+  const [u, w] = basis(E), det = u[0]*w[1] - u[1]*w[0];
+  return [(x0*w[1] - y0*w[0])/det, (u[0]*y0 - u[1]*x0)/det];
+}
+function closedForm(E, cc, t) {
+  const [c1, c2] = cc;
+  if (E.type === 'real') {
+    const e1 = c1*Math.exp(E.l1*t), e2 = c2*Math.exp(E.l2*t);
+    return [e1*E.v1[0] + e2*E.v2[0], e1*E.v1[1] + e2*E.v2[1]];
+  }
+  if (E.type === 'complex') {
+    const ea = Math.exp(E.alpha*t), co = Math.cos(E.beta*t), si = Math.sin(E.beta*t), p = E.p, q = E.q;
+    return [0,1].map(k => ea*(c1*(p[k]*co - q[k]*si) + c2*(p[k]*si + q[k]*co)));
+  }
+  if (E.type === 'repeated') {
+    const el = Math.exp(E.l1*t);
+    return [0,1].map(k => el*(c1*E.v1[k] + c2*(t*E.v1[k] + E.w[k])));
+  }
+  const el = Math.exp(E.l1*t);
+  return [c1*el, c2*el];
+}
+
+// ── Numerics ─────────────────────────────────────────────────────────────────
+function integrate(A, x0, y0, T, dir) {
+  const [a,b,c,d] = A, h = 0.01*dir, n = Math.round(T/0.01), BIG = 6*R;
+  const f = (x, y) => [a*x + b*y, c*x + d*y];
+  const xs = [x0], ys = [y0];
+  let x = x0, y = y0;
+  for (let i = 0; i < n; i++) {
+    const k1 = f(x, y), k2 = f(x + h/2*k1[0], y + h/2*k1[1]);
+    const k3 = f(x + h/2*k2[0], y + h/2*k2[1]), k4 = f(x + h*k3[0], y + h*k3[1]);
+    x += h/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]);
+    y += h/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+    xs.push(x); ys.push(y);
+    if (Math.abs(x) > BIG || Math.abs(y) > BIG) break;
+  }
+  return {xs, ys};
+}
+
+// Arrowhead marker placed where the forward path first gets `dist` away from its start
+function arrowAt(xs, ys, color, dist=0.7, size=11) {
+  for (let i = 1; i < xs.length; i++) {
+    if (Math.hypot(xs[i]-xs[0], ys[i]-ys[0]) >= dist && Math.abs(xs[i]) < R && Math.abs(ys[i]) < R)
+      return {x:[xs[i-1], xs[i]], y:[ys[i-1], ys[i]], mode:'markers', hoverinfo:'skip', showlegend:false,
+              marker:{symbol:'arrow', angleref:'previous', size:[0, size], color}};
+  }
+  return null;
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+let ICS = [{x0:-2.5, y0:2}];
+let E = null;
+
+function loadPreset() {
+  const P = PRESETS[document.getElementById('preset-sel').value];
+  document.getElementById('scenario-desc').textContent = P.desc;
+  if (P.A) ['a','b','c','d'].forEach((k,i) => { document.getElementById(k+'-s').value = P.A[i]; });
+  build();
+}
+function onMat() {
+  document.getElementById('preset-sel').value = 'custom';
+  document.getElementById('scenario-desc').textContent = PRESETS.custom.desc;
+  schedule();
+}
+function clearICs() { ICS = []; build(); }
+
+function build() {
+  const A = getA(), [a,b,c,d] = A, Tspan = g('T-s');
+  ['a','b','c','d'].forEach(k => sv(k+'-v', g(k+'-s'), 1));
+  E = eig2(a,b,c,d);
+  tex('mat-tex', `A = \\begin{pmatrix}${fmt(a)} & ${fmt(b)}\\\\ ${fmt(c)} & ${fmt(d)}\\end{pmatrix}`);
+
+  // ── Metrics ──
+  const S = classify(E, c);
+  if (E.type === 'complex') {
+    document.getElementById('m-l1').textContent = cplxText(E.alpha, E.beta);
+    document.getElementById('m-l2').textContent = cplxText(E.alpha, -E.beta);
+  } else {
+    document.getElementById('m-l1').textContent = fmt(E.l1);
+    document.getElementById('m-l2').textContent = fmt(E.l2);
+  }
+  document.getElementById('m-type').textContent = S.name;
+  const st = document.getElementById('m-stab');
+  st.textContent = S.stab; st.style.color = S.color;
+
+  // ── Phase plane ──
+  const traces = [];
+  if (document.getElementById('show-field').checked) {
+    const n = 17, sp = 2*R/(n-1), L = 0.42*sp, fx = [], fy = [], sz = [];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = -R + i*sp, y = -R + j*sp, u = a*x + b*y, v = c*x + d*y, m = Math.hypot(u, v);
+      if (m < 1e-9) continue;
+      fx.push(x - L*u/m, x + L*u/m, null); fy.push(y - L*v/m, y + L*v/m, null); sz.push(0, 6, 0);
+    }
+    traces.push({x:fx, y:fy, mode:'lines+markers', hoverinfo:'skip', showlegend:false,
+                 line:{color:'rgba(135,150,196,0.4)', width:1},
+                 marker:{symbol:'arrow', angleref:'previous', size:sz, color:'rgba(135,150,196,0.6)'}});
+  }
+
+  if (document.getElementById('show-eig').checked && E.v1) {
+    const eigLine = (v, l, color, name) => {
+      const s = 2*R/Math.hypot(...v);
+      traces.push({x:[-s*v[0], s*v[0]], y:[-s*v[1], s*v[1]], mode:'lines', name, hoverinfo:'skip',
+                   line:{color, width:2.5}, opacity:0.9});
+      if (Math.abs(l) > 1e-9) {
+        // Arrows show the direction of motion along the straight-line solution
+        const r0 = 0.45*R, r1 = r0 + 0.3*Math.sign(l);
+        for (const sgn of [1, -1]) {
+          const u = [sgn*v[0]/Math.hypot(...v), sgn*v[1]/Math.hypot(...v)];
+          traces.push({x:[u[0]*r0, u[0]*r1], y:[u[1]*r0, u[1]*r1], mode:'markers', hoverinfo:'skip', showlegend:false,
+                       marker:{symbol:'arrow', angleref:'previous', size:[0, 13], color}});
+        }
+      }
+    };
+    if (E.type === 'repeated') eigLine(E.v1, E.l1, '#34d399', `e^(λt)v, λ = ${fmt(E.l1)}`);
+    else {
+      eigLine(E.v1, E.l1, '#34d399', Math.abs(E.l1) < 1e-9 ? 'λ₁ = 0: line of equilibria' : `e^(λ₁t)v₁, λ₁ = ${fmt(E.l1)}`);
+      eigLine(E.v2, E.l2, '#fa8431', Math.abs(E.l2) < 1e-9 ? 'λ₂ = 0: line of equilibria' : `e^(λ₂t)v₂, λ₂ = ${fmt(E.l2)}`);
+    }
+  }
+
+  if (document.getElementById('show-samples').checked) {
+    const sx = [], sy = [];
+    for (let k = 0; k < 12; k++) {
+      const th = (k + 0.5)*Math.PI/6, x0 = 3.3*Math.cos(th), y0 = 3.3*Math.sin(th);
+      const f = integrate(A, x0, y0, Tspan, 1), bk = integrate(A, x0, y0, Tspan, -1);
+      sx.push(...bk.xs.reverse(), ...f.xs.slice(1), null); sy.push(...bk.ys.reverse(), ...f.ys.slice(1), null);
+      const ar = arrowAt(f.xs, f.ys, 'rgba(232,237,248,0.45)', 0.6, 9);
+      if (ar) traces.push(ar);
+    }
+    traces.push({x:sx, y:sy, mode:'lines', hoverinfo:'skip', showlegend:false,
+                 line:{color:'rgba(232,237,248,0.22)', width:1.2}});
+  }
+
+  ICS.forEach((ic, i) => {
+    const col = COLORS[i % COLORS.length];
+    const f = integrate(A, ic.x0, ic.y0, Tspan, 1), bk = integrate(A, ic.x0, ic.y0, Tspan, -1);
+    traces.push({x:[...bk.xs.reverse(), ...f.xs.slice(1)], y:[...bk.ys.reverse(), ...f.ys.slice(1)],
+                 mode:'lines', line:{color:col, width:2.5}, hoverinfo:'skip', showlegend:false});
+    const ar = arrowAt(f.xs, f.ys, col, 0.5, 13);
+    if (ar) traces.push(ar);
+    traces.push({x:[ic.x0], y:[ic.y0], mode:'markers', showlegend:false, hoverinfo:'skip',
+                 marker:{color:col, size:10, line:{color:'white', width:1.5}}});
+  });
+
+  traces.push({x:[0], y:[0], mode:'markers', name:'Equilibrium', hoverinfo:'skip',
+               marker:{color:'#e8edf8', size:9, symbol:'x'}});
+
+  Plotly.react('pp-plot', traces, {
+    ...BASE, showlegend:true, hovermode:false, dragmode:false,
+    legend:{orientation:'h', x:0, y:-0.08, bgcolor:'rgba(0,0,0,0)', font:{size:11}},
+    margin:{l:44, r:16, t:16, b:70},
+    xaxis:{title:'x₁', range:[-R,R], fixedrange:true, ...AX},
+    yaxis:{title:'x₂', range:[-R,R], fixedrange:true, scaleanchor:'x', scaleratio:1, ...AX},
+  }, CFG);
+
+  // ── General solution ──
+  if (E.type === 'real') {
+    tex('gen-sol', `\\mathbf{x}(t) = c_1 ${expTex(E.l1)}${vecTex(E.v1)} + c_2 ${expTex(E.l2)}${vecTex(E.v2)}`);
+    tex('gen-aux', `\\lambda_1 = ${fmt(E.l1)},\\ \\mathbf{v}_1 = ${vecTex(E.v1)}\\qquad \\lambda_2 = ${fmt(E.l2)},\\ \\mathbf{v}_2 = ${vecTex(E.v2)}`);
+  } else if (E.type === 'complex') {
+    const bt = `${coef(E.beta)}t`;
+    tex('gen-sol', `\\mathbf{x}(t) = ${expTex(E.alpha)}\\Big[c_1\\big(\\cos(${bt})\\,\\mathbf{p} - \\sin(${bt})\\,\\mathbf{q}\\big) + c_2\\big(\\sin(${bt})\\,\\mathbf{p} + \\cos(${bt})\\,\\mathbf{q}\\big)\\Big]`);
+    tex('gen-aux', `\\lambda = ${pmTex(E.alpha, E.beta)},\\quad \\mathbf{v} = \\mathbf{p} \\pm i\\,\\mathbf{q},\\quad \\mathbf{p} = ${vecTex(E.p)},\\ \\mathbf{q} = ${vecTex(E.q)}`);
+  } else if (E.type === 'repeated') {
+    tex('gen-sol', `\\mathbf{x}(t) = c_1 ${expTex(E.l1)}\\mathbf{v} + c_2 ${expTex(E.l1)}\\big(t\\,\\mathbf{v} + \\mathbf{w}\\big)`);
+    tex('gen-aux', `\\lambda = ${fmt(E.l1)}\\ \\text{(repeated)},\\quad \\mathbf{v} = ${vecTex(E.v1)},\\quad \\mathbf{w} = ${vecTex(E.w)}\\ \\text{ solves } (A-\\lambda I)\\mathbf{w} = \\mathbf{v}`);
+  } else {
+    tex('gen-sol', `\\mathbf{x}(t) = ${expTex(E.l1)}\\begin{pmatrix}c_1\\\\c_2\\end{pmatrix}`);
+    tex('gen-aux', `A = ${fmt(E.l1)}I:\\ \\text{every nonzero vector is an eigenvector}`);
+  }
+
+  // ── Selected trajectory: constants and time series ──
+  const partEl = document.getElementById('part-sol');
+  if (!ICS.length) {
+    partEl.textContent = 'Click the phase plane to choose an initial condition.';
+    Plotly.react('ts-plot', [], {...BASE, title:{text:'Click the phase plane to see x₁(t) and x₂(t)', font:{size:13}},
+                                 xaxis:{title:'t', ...AX}, yaxis:{...AX}}, CFG);
+    return;
+  }
+  const ic = ICS[ICS.length-1], cc = coeffs(E, ic.x0, ic.y0);
+  partEl.innerHTML = katex.renderToString(
+    `\\mathbf{x}(0) = ${vecTex([ic.x0, ic.y0])}\\ \\Rightarrow\\ c_1 = ${fmt(cc[0], 3)},\\quad c_2 = ${fmt(cc[1], 3)}`, KX);
+
+  const ts = [], x1 = [], x2 = [];
+  for (let i = 0; i <= 400; i++) {
+    const t = Tspan*i/400, p = closedForm(E, cc, t);
+    if (Math.abs(p[0]) > 1e6 || Math.abs(p[1]) > 1e6) break;
+    ts.push(t); x1.push(p[0]); x2.push(p[1]);
+  }
+  const col = COLORS[(ICS.length-1) % COLORS.length];
+  Plotly.react('ts-plot', [
+    {x:ts, y:x1, mode:'lines', name:'x₁(t)', line:{color:col, width:2.5}},
+    {x:ts, y:x2, mode:'lines', name:'x₂(t)', line:{color:col, width:2, dash:'dash'}},
+  ], {
+    ...BASE, showlegend:true,
+    title:{text:'Selected trajectory from the formula above', font:{size:13}},
+    legend:{x:0.99, xanchor:'right', y:0.98, bgcolor:'rgba(12,26,48,0.8)', bordercolor:'#1A304D', borderwidth:1, font:{size:11}},
+    margin:{l:52, r:16, t:32, b:44},
+    xaxis:{title:'t', range:[0, Tspan], ...AX},
+    yaxis:{title:'x', ...AX},
+  }, CFG);
+}
+
+// ── Click to add an initial condition ────────────────────────────────────────
+let clickAttached = false;
+function attachClick() {
+  if (clickAttached) return;
+  clickAttached = true;
+  const gd = document.getElementById('pp-plot');
+  gd.addEventListener('click', evt => {
+    if (!gd._fullLayout) return;
+    const rect = gd.getBoundingClientRect(), xa = gd._fullLayout.xaxis, ya = gd._fullLayout.yaxis;
+    const x = xa.p2d(evt.clientX - rect.left - xa._offset), y = ya.p2d(evt.clientY - rect.top - ya._offset);
+    if (!isFinite(x) || !isFinite(y) || Math.abs(x) > R || Math.abs(y) > R) return;
+    if (ICS.length >= 6) ICS.shift();
+    ICS.push({x0:x, y0:y});
+    build();
+  });
+}
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 60); }
+window.addEventListener('load', () => { loadPreset(); attachClick(); });
+</script>
+</body>
+</html>

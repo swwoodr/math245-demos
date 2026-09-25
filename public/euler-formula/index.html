@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Euler's Formula</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .top-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.25fr); gap:1rem; }
+    @media (max-width: 900px) { .top-grid { grid-template-columns:1fr; } }
+    .btn-row { display:flex; gap:0.4rem; flex-wrap:wrap; }
+    .btn-row .btn { padding:0.35rem 0.8rem; font-size:0.82rem; }
+    .info-box { padding:0.9rem 1.1rem; line-height:1.8; font-size:0.9rem; overflow-x:auto; }
+    #scenario-desc { font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Euler's Formula</h1>
+  <p class="demo-eq">$e^{i\theta} = \cos\theta + i\sin\theta \qquad\Longrightarrow\qquad e^{(\alpha + \beta i)t} = e^{\alpha t}\left(\cos\beta t + i\sin\beta t\right)$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Preset</div>
+      <div class="ctrl-row">
+        <select id="preset-sel" onchange="loadPreset()">
+          <option value="circle">Unit circle: e^(it)</option>
+          <option value="fast">Faster rotation: e^(3it)</option>
+          <option value="decay">Decaying spiral: e^((−0.3 + 2i)t)</option>
+          <option value="grow">Growing spiral: e^((0.1 + i)t)</option>
+          <option value="real">No rotation: e^(−0.5t)</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div id="scenario-desc"></div>
+      </div>
+
+      <div class="ctrl-section">Exponent λ = α + βi</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">α (growth / decay) <span class="ctrl-val" id="al-v">0.00</span></div>
+        <input type="range" id="al-s" min="-1" max="0.5" step="0.05" value="0" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">β (rotation speed) <span class="ctrl-val" id="be-v">1.00</span></div>
+        <input type="range" id="be-s" min="-4" max="4" step="0.1" value="1" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span <span class="ctrl-val" id="tm-v">2π</span></div>
+        <input type="range" id="tm-s" min="1" max="8" step="0.5" value="2"
+               oninput="setTmaxLabel(); schedule()">
+      </div>
+
+      <div class="ctrl-section">Time t</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">t <span class="ctrl-val" id="t-v">0.00</span></div>
+        <input type="range" id="t-s" min="0" max="6.2832" step="0.01" value="0"
+               oninput="stop(); tNow = +this.value; draw()">
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="play-btn" onclick="togglePlay()">▶ Play</button>
+        <button class="btn" onclick="jumpTo(Math.PI)">t = π</button>
+        <button class="btn" onclick="jumpTo(0)">t = 0</button>
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-proj" checked onchange="draw()"> Projections onto the axes</label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-conj" onchange="draw()"> Conjugate $e^{(\alpha - \beta i)t}$</label>
+      </div>
+
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="top-grid">
+        <div class="plot-box"><div id="cp-plot" style="height:400px;"></div></div>
+        <div class="plot-box"><div id="tp-plot" style="height:400px;"></div></div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">|z| = e^(αt)</div><div class="metric-value" id="m-r">—</div></div>
+        <div class="metric"><div class="metric-label">Angle βt</div><div class="metric-value" id="m-th">—</div></div>
+        <div class="metric"><div class="metric-label">Re z = e^(αt) cos βt</div><div class="metric-value plain" id="m-re">—</div></div>
+        <div class="metric"><div class="metric-label">Im z = e^(αt) sin βt</div><div class="metric-value plain" id="m-im">—</div></div>
+      </div>
+
+      <div class="plot-box info-box">
+        <div id="now-tex"></div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 From complex roots to real solutions</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            If the characteristic equation of $ay'' + by' + cy = 0$ has roots $r = \alpha \pm \beta i$, then
+            $e^{(\alpha + \beta i)t}$ and $e^{(\alpha - \beta i)t}$ both solve the ODE. They are complex, but
+            averaging them cancels the imaginary parts:
+          </p>
+          <p>$$\tfrac{1}{2}\left(e^{(\alpha+\beta i)t} + e^{(\alpha-\beta i)t}\right) = e^{\alpha t}\cos\beta t,
+                \qquad \tfrac{1}{2i}\left(e^{(\alpha+\beta i)t} - e^{(\alpha-\beta i)t}\right) = e^{\alpha t}\sin\beta t.$$</p>
+          <p>
+            So the real general solution is $y = e^{\alpha t}(c_1\cos\beta t + c_2\sin\beta t)$: $\beta$ sets how fast it
+            oscillates and $\alpha$ sets whether it decays ($\alpha < 0$), grows ($\alpha > 0$), or keeps a constant
+            amplitude ($\alpha = 0$). Turn on the conjugate to see the two rotating points whose average is the real part.
+          </p>
+          <p>
+            See it in action in <a href="/char-roots/" style="color:var(--blue-bright);">Characteristic Roots</a>
+            and the <a href="/s-plane/" style="color:var(--blue-bright);">s-Plane Pole Explorer</a>.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:48, r:16, t:32, b:44}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#4a5a86', zerolinewidth:1.5, zeroline:true};
+const KX   = {throwOnError:false};
+const CZ = '#f0a500', CC = '#4d9fff', CRE = '#34d399', CIM = '#f46f7b';
+
+const PRESETS = {
+  circle: {al:0,    be:1,  tm:2, desc:'α = 0, β = 1: the point moves around the unit circle once every 2π. At t = π it reaches −1 (e^(iπ) = −1).'},
+  fast:   {al:0,    be:3,  tm:2, desc:'β = 3 spins three times as fast: period 2π/3.'},
+  decay:  {al:-0.3, be:2,  tm:4, desc:'α < 0 shrinks the radius: the real part is a decaying oscillation — an underdamped spring.'},
+  grow:   {al:0.1,  be:1,  tm:4, desc:'α > 0 grows the radius: an oscillation with increasing amplitude.'},
+  real:   {al:-0.5, be:0,  tm:2, desc:'β = 0 means no rotation: the point slides along the real axis — plain exponential decay.'},
+  custom: {al:null, desc:'Set α and β with the sliders.'},
+};
+
+function g(id) { return parseFloat(document.getElementById(id).value); }
+function sv(id, v, dec) { document.getElementById(id).textContent = parseFloat(v).toFixed(dec); }
+function fmt(x, dp=2) { if (Math.abs(x) < 5e-10) x = 0; return String(parseFloat(x.toFixed(dp))); }
+function tmax() { return g('tm-s')*Math.PI; }
+function setTmaxLabel() {
+  const k = g('tm-s');
+  document.getElementById('tm-v').textContent = (k === 1 ? '' : fmt(k)) + 'π';
+  const ts = document.getElementById('t-s');
+  ts.max = tmax().toFixed(4);
+  if (tNow > tmax()) tNow = tmax();
+}
+function lambdaTex(al, be) {
+  const a = fmt(al), b = fmt(Math.abs(be));
+  const bi = b === '1' ? 'i' : `${b}i`;
+  if (b === '0') return a;
+  if (a === '0') return (be < 0 ? '-' : '') + bi;
+  return `${a} ${be < 0 ? '-' : '+'} ${bi}`;
+}
+
+let tNow = 0;
+
+function loadPreset() {
+  const P = PRESETS[document.getElementById('preset-sel').value];
+  document.getElementById('scenario-desc').textContent = P.desc;
+  if (P.al !== null) {
+    document.getElementById('al-s').value = P.al;
+    document.getElementById('be-s').value = P.be;
+    document.getElementById('tm-s').value = P.tm;
+  }
+  tNow = 0;
+  build();
+}
+function onParam() {
+  document.getElementById('preset-sel').value = 'custom';
+  document.getElementById('scenario-desc').textContent = PRESETS.custom.desc;
+  schedule();
+}
+
+function build() {
+  sv('al-v', g('al-s'), 2); sv('be-v', g('be-s'), 2);
+  setTmaxLabel();
+  draw();
+}
+
+function draw() {
+  const al = g('al-s'), be = g('be-s'), T = tmax(), t = Math.min(tNow, T);
+  const showProj = document.getElementById('show-proj').checked;
+  const showConj = document.getElementById('show-conj').checked;
+  document.getElementById('t-s').value = t;
+  sv('t-v', t, 2);
+
+  const n = 600, ts = [], re = [], im = [], env = [];
+  for (let i = 0; i <= n; i++) {
+    const s = T*i/n, r = Math.exp(al*s);
+    ts.push(s); re.push(r*Math.cos(be*s)); im.push(r*Math.sin(be*s)); env.push(r);
+  }
+  const rNow = Math.exp(al*t), x = rNow*Math.cos(be*t), y = rNow*Math.sin(be*t);
+  const k = Math.round(t/T*n);
+
+  // ── Complex plane: zoom out to follow a growing spiral ──
+  const R = Math.max(1.35, 1.2*Math.max(1, rNow));
+  const cp = [];
+  const circ = {x:[], y:[]};
+  for (let i = 0; i <= 120; i++) { circ.x.push(Math.cos(2*Math.PI*i/120)); circ.y.push(Math.sin(2*Math.PI*i/120)); }
+  cp.push({x:circ.x, y:circ.y, mode:'lines', line:{color:'rgba(232,237,248,0.2)', width:1}, hoverinfo:'skip', showlegend:false});
+  cp.push({x:re, y:im, mode:'lines', line:{color:'rgba(240,165,0,0.22)', width:1.5}, hoverinfo:'skip', showlegend:false});
+  cp.push({x:re.slice(0, k+1), y:im.slice(0, k+1), mode:'lines', line:{color:CZ, width:2.5}, hoverinfo:'skip',
+           name:'z(t)'});
+
+  const ann = [{x, y, ax:0, ay:0, xref:'x', yref:'y', axref:'x', ayref:'y', showarrow:true, text:'',
+                arrowhead:2, arrowsize:1, arrowwidth:3, arrowcolor:CZ}];
+
+  if (showProj) {
+    cp.push({x:[x, x], y:[y, 0], mode:'lines', line:{color:CRE, width:1.5, dash:'dash'}, hoverinfo:'skip', showlegend:false});
+    cp.push({x:[x, 0], y:[y, y], mode:'lines', line:{color:CIM, width:1.5, dash:'dash'}, hoverinfo:'skip', showlegend:false});
+    cp.push({x:[x], y:[0], mode:'markers', marker:{color:CRE, size:9}, name:'Re z', hoverinfo:'skip'});
+    cp.push({x:[0], y:[y], mode:'markers', marker:{color:CIM, size:9}, name:'Im z', hoverinfo:'skip'});
+  }
+  if (showConj) {
+    cp.push({x:re, y:im.map(v => -v), mode:'lines', line:{color:'rgba(77,159,255,0.22)', width:1.5}, hoverinfo:'skip', showlegend:false});
+    cp.push({x:re.slice(0, k+1), y:im.slice(0, k+1).map(v => -v), mode:'lines', line:{color:CC, width:2},
+             hoverinfo:'skip', name:'conjugate'});
+    ann.push({x, y:-y, ax:0, ay:0, xref:'x', yref:'y', axref:'x', ayref:'y', showarrow:true, text:'',
+              arrowhead:2, arrowsize:1, arrowwidth:2.5, arrowcolor:CC});
+    cp.push({x:[x, x], y:[y, -y], mode:'lines', line:{color:'rgba(232,237,248,0.5)', width:1, dash:'dot'}, hoverinfo:'skip', showlegend:false});
+    cp.push({x:[x], y:[0], mode:'markers', marker:{color:'#e8edf8', size:11, symbol:'diamond', line:{color:CRE, width:2}},
+             name:'average = Re z', hoverinfo:'skip'});
+  }
+  cp.push({x:[x], y:[y], mode:'markers', marker:{color:CZ, size:11, line:{color:'white', width:1.5}}, hoverinfo:'skip', showlegend:false});
+
+  Plotly.react('cp-plot', cp, {
+    ...BASE, showlegend:true, hovermode:false, dragmode:false,
+    title:{text:'Complex plane', font:{size:13}},
+    legend:{orientation:'h', x:0, y:-0.12, font:{size:11}},
+    margin:{l:48, r:16, t:32, b:70},
+    xaxis:{title:'Re', range:[-R, R], fixedrange:true, ...AX},
+    yaxis:{title:'Im', range:[-R, R], fixedrange:true, scaleanchor:'x', scaleratio:1, ...AX},
+    annotations:ann,
+  }, CFG);
+
+  // ── Real and imaginary parts vs t ──
+  const tp = [
+    {x:ts, y:env, mode:'lines', line:{color:'rgba(232,237,248,0.35)', width:1, dash:'dot'}, name:'±e^(αt)', hoverinfo:'skip'},
+    {x:ts, y:env.map(v => -v), mode:'lines', line:{color:'rgba(232,237,248,0.35)', width:1, dash:'dot'}, hoverinfo:'skip', showlegend:false},
+    {x:ts, y:re, mode:'lines', line:{color:CRE, width:2.5}, name:'Re z = e^(αt) cos βt'},
+    {x:ts, y:im, mode:'lines', line:{color:CIM, width:2, dash:'dash'}, name:'Im z = e^(αt) sin βt'},
+    {x:[t, t], y:[x, y], mode:'markers', marker:{color:[CRE, CIM], size:9, line:{color:'white', width:1}}, hoverinfo:'skip', showlegend:false},
+  ];
+  const piTicks = [], piText = [];
+  for (let j = 0; j <= Math.round(T/(Math.PI/2)); j++) {
+    piTicks.push(j*Math.PI/2);
+    piText.push(j === 0 ? '0' : j % 2 === 0 ? (j/2 === 1 ? 'π' : `${j/2}π`) : (j === 1 ? 'π/2' : `${j}π/2`));
+  }
+  Plotly.react('tp-plot', tp, {
+    ...BASE, showlegend:true, hovermode:false,
+    title:{text:'Real and imaginary parts', font:{size:13}},
+    legend:{orientation:'h', x:0, y:-0.12, font:{size:11}},
+    margin:{l:48, r:16, t:32, b:70},
+    xaxis:{title:'t', range:[0, T], tickvals:piTicks, ticktext:piText, ...AX},
+    yaxis:{...AX},
+    shapes:[{type:'line', xref:'x', yref:'paper', x0:t, x1:t, y0:0, y1:1, line:{color:'rgba(232,237,248,0.45)', width:1}}],
+  }, CFG);
+
+  // ── Readouts ──
+  document.getElementById('m-r').textContent  = rNow.toFixed(3);
+  document.getElementById('m-th').textContent = `${(be*t).toFixed(2)} rad`;
+  document.getElementById('m-re').textContent = x.toFixed(3);
+  document.getElementById('m-im').textContent = y.toFixed(3);
+
+  const lam = lambdaTex(al, be);
+  const cosArg = `${fmt(be*t)}`;
+  const val = fmt(y, 3) === '0' ? fmt(x, 3)
+            : fmt(x, 3) === '0' ? `${fmt(y, 3)}\\,i`
+            : `${fmt(x, 3)} ${y < 0 ? '-' : '+'} ${fmt(Math.abs(y), 3)}\\,i`;
+  const s = `e^{(${lam})\\,t}\\Big|_{t = ${fmt(t)}} = e^{${fmt(al*t)}}\\big(\\cos(${cosArg}) + i\\sin(${cosArg})\\big) = ${val}`;
+  document.getElementById('now-tex').innerHTML = katex.renderToString(s, {...KX, displayMode:true});
+}
+
+// ── Animation ────────────────────────────────────────────────────────────────
+let playing = false, lastTs = null, gen = 0;
+function frame(ts, my) {
+  if (!playing || my !== gen) return;
+  if (lastTs !== null) {
+    tNow += (ts - lastTs)/1000 * tmax()/8;      // one full span every 8 s
+    if (tNow > tmax()) tNow = 0;
+  }
+  lastTs = ts;
+  draw();
+  requestAnimationFrame(t => frame(t, my));
+}
+function togglePlay() {
+  if (playing) return stop();
+  playing = true; lastTs = null;
+  if (tNow >= tmax()) tNow = 0;
+  document.getElementById('play-btn').textContent = '⏸ Pause';
+  const my = ++gen;
+  requestAnimationFrame(t => frame(t, my));
+}
+function stop() {
+  playing = false;
+  document.getElementById('play-btn').textContent = '▶ Play';
+}
+function jumpTo(t) { stop(); tNow = Math.min(t, tmax()); draw(); }
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 50); }
+window.addEventListener('load', () => { loadPreset(); togglePlay(); });
+</script>
+</body>
+</html>

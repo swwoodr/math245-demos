@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eigenvectors &amp; Eigenvalues</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .mat-grid { display:grid; grid-template-columns:1fr 1fr; gap:0 0.75rem; }
+    .mat-tex { text-align:center; margin:0.25rem 0 0.75rem; min-height:3rem; }
+    .small-btn { padding:0.3rem 0.7rem; font-size:0.8rem; background:rgba(255,255,255,0.06);
+                 border:1px solid var(--glass-border); border-radius:6px; color:var(--white); cursor:pointer; }
+    .small-btn:hover { background:rgba(77,159,255,0.18); }
+    .btn-row { display:flex; gap:0.4rem; flex-wrap:wrap; }
+    .key { display:flex; gap:1rem; flex-wrap:wrap; font-size:0.78rem; color:var(--muted); padding:0.25rem 0.5rem 0; }
+    .key span::before { content:''; display:inline-block; width:14px; height:3px; margin-right:6px; vertical-align:3px; background:var(--c); }
+    .probe-read { font-family:monospace; font-size:0.85rem; color:var(--muted); padding:0.35rem 0.5rem 0.15rem; line-height:1.7; }
+    .probe-status { font-size:0.85rem; padding:0 0.5rem 0.4rem; min-height:1.4rem; }
+    .info-box { padding:0.9rem 1.1rem; line-height:1.8; font-size:0.9rem; }
+    .info-box .cls { color:var(--muted); font-size:0.85rem; margin-top:0.4rem; line-height:1.55; }
+    #scenario-desc { font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Eigenvectors &amp; Eigenvalues</h1>
+  <p class="demo-eq">$A\mathbf{v} = \lambda\mathbf{v}$ — directions that $A$ only stretches, never turns</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Preset</div>
+      <div class="ctrl-row">
+        <select id="preset-sel" onchange="loadPreset()">
+          <option value="sym">Symmetric: two real eigenvalues</option>
+          <option value="diag">Diagonal: stretch along the axes</option>
+          <option value="flip">Negative eigenvalue (flip)</option>
+          <option value="reflect">Reflection across y = x</option>
+          <option value="singular">Singular (det = 0)</option>
+          <option value="shear">Shear: only one eigenvector</option>
+          <option value="scalar">Scalar multiple of I</option>
+          <option value="rot">Rotation by 90°</option>
+          <option value="rotscale">Rotation + scaling</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div id="scenario-desc"></div>
+      </div>
+
+      <div class="ctrl-section">Matrix A</div>
+      <div class="mat-tex" id="mat-tex"></div>
+      <div class="mat-grid">
+        <div class="ctrl-row">
+          <div class="ctrl-label">a <span class="ctrl-val" id="a-v">2.0</span></div>
+          <input type="range" id="a-s" min="-4" max="4" step="0.1" value="2" oninput="onMat()">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">b <span class="ctrl-val" id="b-v">1.0</span></div>
+          <input type="range" id="b-s" min="-4" max="4" step="0.1" value="1" oninput="onMat()">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">c <span class="ctrl-val" id="c-v">1.0</span></div>
+          <input type="range" id="c-s" min="-4" max="4" step="0.1" value="1" oninput="onMat()">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">d <span class="ctrl-val" id="d-v">2.0</span></div>
+          <input type="range" id="d-s" min="-4" max="4" step="0.1" value="2" oninput="onMat()">
+        </div>
+      </div>
+
+      <div class="ctrl-section">Probe Vector x</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Direction φ (°) <span class="ctrl-val" id="phi-v">20</span></div>
+        <input type="range" id="phi-s" min="0" max="360" step="0.1" value="20"
+               oninput="stopSweep(); sv('phi-v',this.value,1); drawPlot(); updateProbe()">
+      </div>
+      <div class="btn-row">
+        <button class="small-btn" id="sweep-btn" onclick="toggleSweep()">▶ Sweep φ</button>
+        <button class="small-btn" id="snap1" onclick="snapTo(0)">Snap to v₁</button>
+        <button class="small-btn" id="snap2" onclick="snapTo(1)">Snap to v₂</button>
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-grid" checked onchange="drawPlot()"> Transformed grid</label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-circle" checked onchange="drawPlot()"> Unit circle → ellipse</label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-eig" checked onchange="drawPlot()"> Eigenvector lines</label>
+      </div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-cols" onchange="drawPlot()"> Columns Ae₁, Ae₂</label>
+      </div>
+
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box">
+        <div id="tf-plot" style="height:500px;"></div>
+        <div class="key">
+          <span style="--c:#e8edf8">x (unit vector)</span>
+          <span style="--c:#f0a500">Ax</span>
+          <span style="--c:#34d399">λ₁ eigenvector line</span>
+          <span style="--c:#fa8431">λ₂ eigenvector line</span>
+        </div>
+        <div class="probe-read" id="probe-read"></div>
+        <div class="probe-status" id="probe-status"></div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Trace T = a + d</div><div class="metric-value" id="m-T">—</div></div>
+        <div class="metric"><div class="metric-label">Det D = ad − bc</div><div class="metric-value" id="m-D">—</div></div>
+        <div class="metric"><div class="metric-label">λ₁</div><div class="metric-value plain" id="m-l1">—</div></div>
+        <div class="metric"><div class="metric-label">λ₂</div><div class="metric-value plain" id="m-l2">—</div></div>
+      </div>
+
+      <div class="plot-box info-box">
+        <div id="char-eq"></div>
+        <div id="eig-list"></div>
+        <div class="cls" id="classify"></div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 Finding eigenvalues and eigenvectors by hand</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            $A\mathbf{v} = \lambda\mathbf{v}$ with $\mathbf{v}\neq\mathbf{0}$ means $(A-\lambda I)\mathbf{v}=\mathbf{0}$
+            has a nonzero solution, so $A-\lambda I$ must be singular:
+          </p>
+          <p>$$\det(A-\lambda I) = \lambda^2 - (a+d)\,\lambda + (ad-bc) = \lambda^2 - T\lambda + D = 0.$$</p>
+          <p>
+            The roots are $\lambda = \tfrac{1}{2}\bigl(T \pm \sqrt{T^2-4D}\bigr)$. For each $\lambda$, solve
+            $(A-\lambda I)\mathbf{v}=\mathbf{0}$; for a $2\times 2$ matrix one row is enough, e.g.
+            $\mathbf{v} = \begin{pmatrix} b \\ \lambda - a\end{pmatrix}$ when $b \neq 0$.
+          </p>
+          <p>
+            Useful checks: $\lambda_1 + \lambda_2 = T$ and $\lambda_1\lambda_2 = D$.
+            If $T^2 - 4D < 0$ the eigenvalues are complex and no real direction is left unturned.
+          </p>
+          <p>
+            Next step: see how eigenvectors become straight-line solutions of $\mathbf{x}' = A\mathbf{x}$ in the
+            <a href="/linear-systems/" style="color:var(--blue-bright);">Linear Systems</a> demo.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const EPS = 1e-9, DEG = Math.PI/180;
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:44, r:16, t:16, b:40}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+const KX   = {throwOnError:false};
+
+const PRESETS = {
+  sym:      {A:[2,1,1,2],       desc:'Two real eigenvalues with perpendicular eigenvectors (true for every symmetric matrix).'},
+  diag:     {A:[2,0,0,0.5],     desc:'The eigenvectors are the coordinate axes; the eigenvalues are the diagonal entries.'},
+  flip:     {A:[1,1,2,0],       desc:'λ = −1 reverses direction along its eigenvector. Eigenvectors need not be perpendicular.'},
+  reflect:  {A:[0,1,1,0],       desc:'Vectors on y = x are unchanged (λ = 1); vectors on y = −x are flipped (λ = −1).'},
+  singular: {A:[1,2,0.5,1],     desc:'det A = 0, so λ = 0 is an eigenvalue: A crushes the whole plane onto a line.'},
+  shear:    {A:[1,1,0,1],       desc:'Repeated eigenvalue λ = 1 but only one eigenvector direction — a defective matrix.'},
+  scalar:   {A:[1.5,0,0,1.5],   desc:'A = 1.5 I scales everything equally, so every direction is an eigenvector.'},
+  rot:      {A:[0,-1,1,0],      desc:'Rotation turns every vector, so there is no real eigenvector. The eigenvalues are ±i.'},
+  rotscale: {A:[1,-1,1,1],      desc:'Rotation by 45° and scaling by √2: eigenvalues 1 ± i, again no real eigenvector.'},
+  custom:   {A:null,            desc:'Drag the entries of A.'},
+};
+
+function sv(id, v, dec) { document.getElementById(id).textContent = parseFloat(v).toFixed(dec); }
+function g(id) { return parseFloat(document.getElementById(id).value); }
+function getA() { return ['a','b','c','d'].map(k => g(k+'-s')); }
+function fmt(x, dp=2) { if (Math.abs(x) < 5e-10) x = 0; return String(parseFloat(x.toFixed(dp))); }
+function vecTex(v) { return `\\begin{pmatrix}${fmt(v[0])}\\\\${fmt(v[1])}\\end{pmatrix}`; }
+function cplx(re, im) {
+  const r = fmt(re), i = fmt(Math.abs(im)), sign = im < 0 ? '-' : '+';
+  if (r === '0') return `${im < 0 ? '-' : ''}${i === '1' ? '' : i}i`;
+  return `${r} ${sign} ${i === '1' ? '' : i}i`;
+}
+function pmTex(alpha, beta) {
+  const b = fmt(beta) === '1' ? '' : fmt(beta);
+  return fmt(alpha) === '0' ? `\\pm ${b}i` : `${fmt(alpha)} \\pm ${b}i`;
+}
+function tex(el, s, display=false) { document.getElementById(el).innerHTML = katex.renderToString(s, {...KX, displayMode:display}); }
+
+// Textbook-style scaling: integer components when possible (e.g. (1, -2)), first nonzero entry positive
+function normMax(v) {
+  const k = Math.abs(v[0]) >= Math.abs(v[1]) ? 0 : 1;
+  if (Math.abs(v[k]) < EPS) return null;
+  let best = [v[0]/v[k], v[1]/v[k]];
+  const isInt = x => Math.abs(x - Math.round(x)) < 1e-9;
+  for (const j of [0, 1]) {
+    if (Math.abs(v[j]) < EPS) continue;
+    const w = [v[0]/v[j], v[1]/v[j]];
+    if (isInt(w[0]) && isInt(w[1]) && Math.max(...w.map(Math.abs)) <= 10) { best = w; break; }
+  }
+  const lead = Math.abs(best[0]) > EPS ? best[0] : best[1];
+  return lead < 0 ? [-best[0], -best[1]] : best;
+}
+function eigvec(a, b, c, d, l) {
+  const r1 = [b, l-a], r2 = [l-d, c];
+  const n1 = Math.hypot(...r1), n2 = Math.hypot(...r2);
+  if (n1 < 1e-7 && n2 < 1e-7) return null;
+  return normMax(n1 >= n2 ? r1 : r2);
+}
+function eig2(a, b, c, d) {
+  const T = a+d, D = a*d-b*c, disc = T*T-4*D, tol = 1e-9*Math.max(1, T*T);
+  if (disc > tol) {
+    const s = Math.sqrt(disc), l1 = (T+s)/2, l2 = (T-s)/2;
+    return {T, D, type:'real', l1, l2, v1:eigvec(a,b,c,d,l1), v2:eigvec(a,b,c,d,l2)};
+  }
+  if (disc < -tol) {
+    const alpha = T/2, beta = Math.sqrt(-disc)/2;
+    return {T, D, type:'complex', alpha, beta, p:[1, (alpha-a)/b], q:[0, beta/b]};
+  }
+  const l = T/2, v = eigvec(a,b,c,d,l);
+  return v ? {T, D, type:'repeated', l1:l, l2:l, v1:v} : {T, D, type:'scalar', l1:l, l2:l};
+}
+
+function loadPreset() {
+  const P = PRESETS[document.getElementById('preset-sel').value];
+  document.getElementById('scenario-desc').textContent = P.desc;
+  if (P.A) ['a','b','c','d'].forEach((k,i) => { document.getElementById(k+'-s').value = P.A[i]; });
+  build();
+  const E = eig2(...getA());
+  if (E.v1) snapTo(0);
+}
+
+function onMat() {
+  document.getElementById('preset-sel').value = 'custom';
+  document.getElementById('scenario-desc').textContent = PRESETS.custom.desc;
+  schedule();
+}
+
+let E = null;
+
+function build() {
+  const [a,b,c,d] = getA();
+  ['a','b','c','d'].forEach(k => sv(k+'-v', g(k+'-s'), 1));
+  E = eig2(a,b,c,d);
+  tex('mat-tex', `A = \\begin{pmatrix}${fmt(a)} & ${fmt(b)}\\\\ ${fmt(c)} & ${fmt(d)}\\end{pmatrix}`, true);
+
+  document.getElementById('m-T').textContent = fmt(E.T);
+  document.getElementById('m-D').textContent = fmt(E.D);
+  const l1El = document.getElementById('m-l1'), l2El = document.getElementById('m-l2');
+  if (E.type === 'complex') {
+    l1El.textContent = cplx(E.alpha, E.beta).replace(/ /g,'');
+    l2El.textContent = cplx(E.alpha, -E.beta).replace(/ /g,'');
+  } else { l1El.textContent = fmt(E.l1); l2El.textContent = fmt(E.l2); }
+
+  // Characteristic equation
+  const tT = Math.abs(E.T) < 5e-10 ? '' : (E.T > 0 ? `- ${fmt(E.T)==='1'?'':fmt(E.T)}\\lambda` : `+ ${fmt(-E.T)==='1'?'':fmt(-E.T)}\\lambda`);
+  const tD = Math.abs(E.D) < 5e-10 ? '' : (E.D > 0 ? `+ ${fmt(E.D)}` : `- ${fmt(-E.D)}`);
+  tex('char-eq', `\\det(A-\\lambda I) = \\lambda^2 ${tT} ${tD} = 0`, true);
+
+  // Eigenpairs + geometric description
+  let list = '', cls = '';
+  if (E.type === 'real') {
+    list = `\\lambda_1 = ${fmt(E.l1)},\\ \\mathbf{v}_1 = ${vecTex(E.v1)} \\qquad \\lambda_2 = ${fmt(E.l2)},\\ \\mathbf{v}_2 = ${vecTex(E.v2)}`;
+    const parts = ['Two distinct real eigenvalues give two independent eigenvector directions. Along each line, A just multiplies by its λ.'];
+    if (E.l1 < 0 || E.l2 < 0) parts.push('A negative λ reverses the direction of its eigenvector.');
+    if (Math.abs(E.l1) < 5e-10 || Math.abs(E.l2) < 5e-10) parts.push('λ = 0 means A sends that eigenvector to 0: A is singular (det A = 0).');
+    cls = parts.join(' ');
+  } else if (E.type === 'repeated') {
+    list = `\\lambda_1 = \\lambda_2 = ${fmt(E.l1)},\\ \\mathbf{v} = ${vecTex(E.v1)}\\ \\text{(only one direction)}`;
+    cls = 'Repeated eigenvalue, but A − λI has rank 1, so there is only one eigenvector direction. A is "defective" and acts like a shear.';
+  } else if (E.type === 'scalar') {
+    list = `\\lambda_1 = \\lambda_2 = ${fmt(E.l1)},\\ \\text{every nonzero } \\mathbf{v} \\text{ is an eigenvector}`;
+    cls = `A = ${fmt(E.l1)}I scales every vector by the same factor, so no direction turns.`;
+  } else {
+    list = `\\lambda = ${pmTex(E.alpha, E.beta)},\\quad \\mathbf{v} = ${vecTex(E.p)} \\pm i\\,${vecTex(E.q)}`;
+    const ang = Math.atan2(E.beta, E.alpha)/DEG, mag = Math.sqrt(E.D);
+    cls = `Complex eigenvalues (T² − 4D < 0): no real direction stays on its own line. In a suitable basis A rotates by arg λ ≈ ${ang.toFixed(1)}° and scales by |λ| = √det A ≈ ${mag.toFixed(3)}.`;
+  }
+  tex('eig-list', list, true);
+  document.getElementById('classify').textContent = cls;
+
+  const hasV2 = E.type === 'real';
+  document.getElementById('snap1').style.display = (E.type === 'real' || E.type === 'repeated') ? '' : 'none';
+  document.getElementById('snap2').style.display = hasV2 ? '' : 'none';
+  document.getElementById('snap1').textContent = E.type === 'repeated' ? 'Snap to v' : 'Snap to v₁';
+
+  drawPlot();
+  updateProbe();
+}
+
+function arrow(x, y, color, width=3) {
+  return {x, y, ax:0, ay:0, xref:'x', yref:'y', axref:'x', ayref:'y', showarrow:true, text:'',
+          arrowhead:2, arrowsize:1, arrowwidth:width, arrowcolor:color};
+}
+function label(x, y, text, color) {
+  const r = Math.hypot(x, y) || 1;
+  return {x: x + 0.28*x/r, y: y + 0.28*y/r, text, showarrow:false, font:{color, size:13}};
+}
+
+function drawPlot() {
+  if (!E) return;
+  const [a,b,c,d] = getA();
+  const Av = (x, y) => [a*x + b*y, c*x + d*y];
+  const S = a*a+b*b+c*c+d*d, smax = Math.sqrt((S + Math.sqrt(Math.max(0, S*S - 4*E.D*E.D)))/2);
+  const R = Math.ceil(Math.max(2.5, 1.2*smax)*2)/2;
+  const K = Math.ceil(R);
+  const traces = [], ann = [];
+
+  // Original grid (faint)
+  const ogx = [], ogy = [];
+  for (let k = -K; k <= K; k++) { ogx.push(k, k, null, -K, K, null); ogy.push(-K, K, null, k, k, null); }
+  traces.push({x:ogx, y:ogy, mode:'lines', line:{color:'rgba(135,150,196,0.13)', width:1}, hoverinfo:'skip', showlegend:false});
+
+  if (document.getElementById('show-grid').checked) {
+    const tx = [], ty = [];
+    for (let k = -K; k <= K; k++) {
+      const p1 = Av(k,-K), p2 = Av(k,K), p3 = Av(-K,k), p4 = Av(K,k);
+      tx.push(p1[0], p2[0], null, p3[0], p4[0], null);
+      ty.push(p1[1], p2[1], null, p3[1], p4[1], null);
+    }
+    traces.push({x:tx, y:ty, mode:'lines', name:'Image of the grid', line:{color:'rgba(77,159,255,0.32)', width:1.2}, hoverinfo:'skip'});
+  }
+
+  if (document.getElementById('show-circle').checked) {
+    const cx = [], cy = [], ex = [], ey = [];
+    for (let i = 0; i <= 200; i++) {
+      const t = 2*Math.PI*i/200, p = Av(Math.cos(t), Math.sin(t));
+      cx.push(Math.cos(t)); cy.push(Math.sin(t)); ex.push(p[0]); ey.push(p[1]);
+    }
+    traces.push({x:cx, y:cy, mode:'lines', name:'Unit circle', line:{color:'rgba(232,237,248,0.55)', width:1.5, dash:'dash'}, hoverinfo:'skip'});
+    traces.push({x:ex, y:ey, mode:'lines', name:'Its image under A', line:{color:'#9b72e8', width:2.2}, hoverinfo:'skip'});
+  }
+
+  if (document.getElementById('show-eig').checked && E.v1) {
+    const line = (v, color, name) => {
+      const s = 2*R/Math.hypot(...v);
+      traces.push({x:[-s*v[0], s*v[0]], y:[-s*v[1], s*v[1]], mode:'lines', name,
+                   line:{color, width:2.2}, opacity:0.85, hoverinfo:'skip'});
+    };
+    if (E.type === 'repeated') line(E.v1, '#34d399', `λ = ${fmt(E.l1)} (only eigenvector)`);
+    else { line(E.v1, '#34d399', `λ₁ = ${fmt(E.l1)}`); line(E.v2, '#fa8431', `λ₂ = ${fmt(E.l2)}`); }
+  }
+
+  if (document.getElementById('show-cols').checked) {
+    ann.push(arrow(1, 0, 'rgba(45,212,239,0.45)', 2), arrow(0, 1, 'rgba(244,111,123,0.45)', 2));
+    ann.push(arrow(a, c, '#2dd4ef', 2.5), label(a, c, 'Ae₁', '#2dd4ef'));
+    ann.push(arrow(b, d, '#f46f7b', 2.5), label(b, d, 'Ae₂', '#f46f7b'));
+  }
+
+  // Probe x and Ax
+  const phi = g('phi-s')*DEG, x = [Math.cos(phi), Math.sin(phi)], Ax = Av(x[0], x[1]);
+  ann.push(arrow(x[0], x[1], '#e8edf8', 3), label(x[0], x[1], 'x', '#e8edf8'));
+  if (Math.hypot(...Ax) > 1e-6) ann.push(arrow(Ax[0], Ax[1], '#f0a500', 3.5), label(Ax[0], Ax[1], 'Ax', '#f0a500'));
+
+  Plotly.react('tf-plot', traces, {
+    ...BASE, showlegend:true,
+    legend:{x:0.01, y:0.99, bgcolor:'rgba(12,26,48,0.8)', bordercolor:'#1A304D', borderwidth:1, font:{size:11}},
+    xaxis:{range:[-R,R], ...AX, zeroline:true},
+    yaxis:{range:[-R,R], scaleanchor:'x', scaleratio:1, ...AX, zeroline:true},
+    annotations:ann,
+  }, CFG);
+}
+
+function updateProbe() {
+  if (!E) return;
+  const [a,b,c,d] = getA();
+  const phi = g('phi-s')*DEG, x = [Math.cos(phi), Math.sin(phi)];
+  const Ax = [a*x[0] + b*x[1], c*x[0] + d*x[1]];
+  const nAx = Math.hypot(...Ax), cross = x[0]*Ax[1] - x[1]*Ax[0], dot = x[0]*Ax[0] + x[1]*Ax[1];
+  const angle = nAx < 1e-9 ? 0 : Math.atan2(cross, dot)/DEG;
+  document.getElementById('probe-read').innerHTML =
+    `x = (${x[0].toFixed(3)}, ${x[1].toFixed(3)}) &nbsp;&nbsp; Ax = (${Ax[0].toFixed(3)}, ${Ax[1].toFixed(3)}) &nbsp;&nbsp; angle from x to Ax: ${angle.toFixed(1)}°`;
+  const st = document.getElementById('probe-status');
+  // |cross| is the distance from Ax to the line through x; compare it to the matrix's largest stretch
+  const S = a*a+b*b+c*c+d*d, smax = Math.sqrt((S + Math.sqrt(Math.max(0, S*S - 4*E.D*E.D)))/2);
+  const tol = 0.012*Math.max(smax, 1e-9);
+  if (Math.abs(cross) < tol) {
+    st.style.color = '#34d399';
+    st.textContent = Math.abs(dot) < tol ? '✓ Ax ≈ 0 — x is an eigenvector with λ = 0.'
+                                : `✓ Ax is parallel to x — x is an eigenvector: Ax = ${dot.toFixed(3)} x, so λ ≈ ${dot.toFixed(3)}.`;
+  } else {
+    st.style.color = 'var(--muted)';
+    st.textContent = E.type === 'complex'
+      ? 'Ax never lines up with x for this A — try sweeping φ all the way around.'
+      : 'Sweep φ: when Ax lands on the same line as x, you have found an eigenvector.';
+  }
+}
+
+function snapTo(i) {
+  if (!E) return;
+  const v = i === 0 ? E.v1 : E.v2;
+  if (!v) return;
+  stopSweep();
+  const deg = ((Math.atan2(v[1], v[0])/DEG) + 360) % 360;
+  document.getElementById('phi-s').value = deg.toFixed(1);
+  sv('phi-v', deg, 1);
+  drawPlot(); updateProbe();
+}
+
+// ── Sweep animation ──────────────────────────────────────────────────────────
+let sweeping = false, sweepPhi = 0, lastTs = null, sweepGen = 0;
+function sweepFrame(ts, gen) {
+  if (!sweeping || gen !== sweepGen) return;
+  if (lastTs !== null) sweepPhi = (sweepPhi + (ts - lastTs)/1000*40) % 360;
+  lastTs = ts;
+  document.getElementById('phi-s').value = sweepPhi;
+  sv('phi-v', sweepPhi, 1);
+  drawPlot(); updateProbe();
+  requestAnimationFrame(t => sweepFrame(t, gen));
+}
+function toggleSweep() {
+  if (sweeping) return stopSweep();
+  sweeping = true; sweepPhi = g('phi-s'); lastTs = null;
+  document.getElementById('sweep-btn').textContent = '⏸ Stop';
+  const gen = ++sweepGen;
+  requestAnimationFrame(t => sweepFrame(t, gen));
+}
+function stopSweep() {
+  sweeping = false;
+  document.getElementById('sweep-btn').textContent = '▶ Sweep φ';
+}
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 60); }
+window.addEventListener('load', loadPreset);
+</script>
+</body>
+</html>
