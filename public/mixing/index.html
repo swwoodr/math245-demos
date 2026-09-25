@@ -60,13 +60,13 @@
       </div>
 
       <!-- Metrics -->
-      <div class="metric-row" style="margin-top:1rem;">
-        <div class="metric"><div class="metric-value" id="Qfin">—</div><div class="metric-label">Q at T (oz)</div></div>
-        <div class="metric"><div class="metric-value" id="Cfin">—</div><div class="metric-label">Conc. at T (oz/gal)</div></div>
+      <div class="metrics-row cols-2" style="margin-top:1rem;">
+        <div class="metric"><div class="metric-label">Q at end (oz)</div><div class="metric-value" id="Qfin">—</div></div>
+        <div class="metric"><div class="metric-label">Conc. at end (oz/gal)</div><div class="metric-value" id="Cfin">—</div></div>
       </div>
-      <div class="metric-row" style="margin-top:0.5rem;">
-        <div class="metric"><div class="metric-value" id="Vfin">—</div><div class="metric-label">V at T (gal)</div></div>
-        <div class="metric"><div class="metric-value" id="Qeq">—</div><div class="metric-label">Q equilibrium</div></div>
+      <div class="metrics-row cols-2" style="margin-top:0.5rem;">
+        <div class="metric"><div class="metric-label">V at end (gal)</div><div class="metric-value" id="Vfin">—</div></div>
+        <div class="metric"><div class="metric-label">Q equilibrium</div><div class="metric-value" id="Qeq">—</div></div>
       </div>
 
       <div style="margin-top:0.75rem;padding:0.75rem;background:rgba(255,255,255,0.04);border-radius:8px;font-size:0.8rem;color:var(--muted);" id="ode-display"></div>
@@ -95,23 +95,24 @@ function build(){
   const rout=+document.getElementById('rout-s').value;
   const tMax=+document.getElementById('T-s').value;
 
-  // V(t) = V0 + (rin - rout)*t  (if volume stays positive)
-  // dQ/dt = rin*cin - rout * Q/V(t)
-
-  const h=0.05;
-  const Nt=Math.round(tMax/h);
-  const ts=[0],Qs=[Q0],Vs=[V0],Cs=[Q0/V0];
-  let Q=Q0;
-
-  for(let i=0;i<Nt;i++){
-    const t=ts[ts.length-1];
-    const V=V0+(rin-rout)*t;
-    if(V<=0.01) break; // tank empty
-    const dQ=rin*cin - rout*Q/V;
-    Q+=h*dQ;
-    if(Q<0) Q=0;
-    const Vnew=V0+(rin-rout)*(t+h);
-    ts.push(t+h); Qs.push(Q); Vs.push(Vnew); Cs.push(Q/Math.max(Vnew,0.01));
+  // Exact solution by integrating factor. With r = rin − rout and V(t) = V0 + r t:
+  //   r ≠ 0:  Q(t) = cin·V + (Q0 − cin·V0)·(V0/V)^(rout/r)
+  //   r = 0:  Q(t) = cin·V0 + (Q0 − cin·V0)·e^(−rout·t/V0)
+  const r = rin - rout;
+  const tEmpty = r < 0 ? V0/(-r) : Infinity;
+  const empties = tEmpty <= tMax;
+  const tEnd = empties ? tEmpty*(1 - 1e-9) : tMax;
+  const Qexact = t => {
+    const V = V0 + r*t;
+    if (Math.abs(r) < 1e-12) return cin*V0 + (Q0 - cin*V0)*Math.exp(-rout*t/V0);
+    return cin*V + (Q0 - cin*V0)*Math.pow(V0/V, rout/r);
+  };
+  const ts=[], Qs=[], Vs=[], Cs=[];
+  for (let i = 0; i <= 500; i++) {
+    const t = tEnd*i/500, V = V0 + r*t, Q = Math.max(0, Qexact(t));
+    ts.push(t); Qs.push(Q); Vs.push(V);
+    // As V → 0 the concentration tends to cin; avoid dividing by a vanishing volume
+    Cs.push(V > 1e-9*V0 ? Q/V : cin);
   }
 
   // Equilibrium (constant volume case)
@@ -130,14 +131,20 @@ function build(){
   sv('Qfin',Qfin.toFixed(1),'');
   sv('Cfin',Cfin.toFixed(4),'');
   sv('Vfin',Vfin.toFixed(1),'');
-  sv('Qeq', isNaN(Qeq)?'N/A (var. vol.)':Qeq.toFixed(1),'');
+  sv('Qeq', isNaN(Qeq)?'none (volume changes)':Qeq.toFixed(1),'');
 
   // ODE display
   const rNet=rin-rout;
-  const odeStr=Math.abs(rNet)<0.01
+  let odeStr=Math.abs(rNet)<0.01
     ? `V(t) = ${V0} gal (constant)<br>Q' = ${rin}·${cin} − ${rout}·Q/${V0} = ${(rin*cin).toFixed(2)} − ${(rout/V0).toFixed(4)}Q`
-    : `V(t) = ${V0} + ${rNet}t gal<br>Q' = ${(rin*cin).toFixed(2)} − (${rout}·Q)/V(t)`;
+    : `V(t) = ${V0} ${rNet > 0 ? '+' : '−'} ${Math.abs(rNet)}t gal<br>Q' = ${(rin*cin).toFixed(2)} − (${rout}·Q)/V(t)`;
+  odeStr += '<br><span style="opacity:0.8">Solved exactly with an integrating factor.</span>';
+  if (empties) odeStr += `<br><b style="color:#fbbf24">Tank empties at t = ${tEmpty.toFixed(2)} min.</b>`;
   document.getElementById('ode-display').innerHTML=odeStr;
+  const emptyShape = empties ? [{type:'line', xref:'x', yref:'paper', x0:tEmpty, x1:tEmpty, y0:0, y1:1,
+                                 line:{color:'rgba(251,191,36,0.6)', width:1.5, dash:'dot'}}] : [];
+  const emptyNote = empties ? [{x:tEmpty, y:1, xref:'x', yref:'paper', text:'tank empty', showarrow:false,
+                                xanchor:'right', yanchor:'top', font:{size:10, color:'#fbbf24'}}] : [];
 
   const qMax=Math.max(...Qs)*1.15||10;
   const cMax=Math.max(...Cs)*1.2||2;
@@ -154,6 +161,7 @@ function build(){
     xaxis:{range:[0,ts[ts.length-1]],title:'t (min)',gridcolor:'rgba(255,255,255,0.06)'},
     yaxis:{range:[0,qMax],title:'Salt Q(t) (oz)',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+    shapes:emptyShape, annotations:emptyNote,
   },{responsive:true,displayModeBar:false});
 
   // Concentration plot
@@ -168,6 +176,7 @@ function build(){
     xaxis:{range:[0,ts[ts.length-1]],title:'t (min)',gridcolor:'rgba(255,255,255,0.06)'},
     yaxis:{range:[0,cMax],title:'Concentration (oz/gal)',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
+    shapes:emptyShape,
   },{responsive:true,displayModeBar:false});
 
   // Volume plot
@@ -178,6 +187,7 @@ function build(){
     xaxis:{range:[0,ts[ts.length-1]],title:'t (min)',gridcolor:'rgba(255,255,255,0.06)'},
     yaxis:{title:'Volume V(t) (gal)',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:false,
+    shapes:emptyShape,
   },{responsive:true,displayModeBar:false});
 }
 

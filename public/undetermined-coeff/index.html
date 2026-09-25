@@ -70,10 +70,10 @@
       <!-- Presets -->
       <div class="ctrl-section">Quick Examples</div>
       <div style="display:grid;grid-template-columns:1fr;gap:0.3rem;">
-        <button class="ex-btn" onclick="setEx(1,5,6,'exp',0,2,0)">y&prime;&prime;+5y&prime;+6y = e^{2t}</button>
+        <button class="ex-btn" onclick="setEx(1,5,6,'exp',0,2,0)">y&prime;&prime;+5y&prime;+6y = e^(2t)</button>
         <button class="ex-btn" onclick="setEx(1,0,4,'sin',0,0,2)">y&prime;&prime;+4y = sin(2t) ← resonance</button>
         <button class="ex-btn" onclick="setEx(1,0,9,'sin',0,0,3)">y&prime;&prime;+9y = sin(3t) ← resonance</button>
-        <button class="ex-btn" onclick="setEx(1,4,4,'exp',0,-2,0)">y&prime;&prime;+4y&prime;+4y = e^{-2t}</button>
+        <button class="ex-btn" onclick="setEx(1,4,4,'exp',0,-2,0)">y&prime;&prime;+4y&prime;+4y = e^(−2t)</button>
         <button class="ex-btn" onclick="setEx(1,0,0,'poly',2,0,0)">y&prime;&prime; = t²</button>
       </div>
     </div>
@@ -137,6 +137,13 @@ function charRoots(a,b,c){
   }
 }
 
+// e^{kt} written the way a textbook would: e^{t}, e^{-t}, e^{2t}, e^{-0.5t}
+function expT(k){
+  const v=parseFloat((+k).toFixed(3));
+  const c=v===1?'':v===-1?'-':String(v);
+  return `e^{${c}t}`;
+}
+
 function formatRoot(r,dp=3){
   if(r.im===0) return r.re.toFixed(dp);
   return `${r.re.toFixed(dp)} ± ${Math.abs(r.im).toFixed(dp)}i`;
@@ -145,34 +152,26 @@ function formatRoot(r,dp=3){
 function ycForm(roots){
   if(roots.length===1&&roots[0].repeated){
     const r=roots[0].re;
-    const expStr=Math.abs(r)<0.001?'':'e^{'+(r>0?'+':'')+r.toFixed(3)+'t}';
+    const expStr=Math.abs(r)<0.001?'':expT(r);
     return `y_c = (C_1 + C_2 t)${expStr}`;
   }
   const r1=roots[0],r2=roots[1];
   if(r1.im!==0){
     const alpha=r1.re,beta=Math.abs(r1.im);
-    const eStr=Math.abs(alpha)<0.001?'':'e^{'+(alpha>0?'+':'')+alpha.toFixed(3)+'t}';
+    const eStr=Math.abs(alpha)<0.001?'':expT(alpha);
     return `y_c = ${eStr}(C_1 \\cos(${beta.toFixed(3)}t) + C_2 \\sin(${beta.toFixed(3)}t))`;
   }
-  return `y_c = C_1 e^{${r1.re.toFixed(3)}t} + C_2 e^{${r2.re.toFixed(3)}t}`;
+  const term=r=>Math.abs(r)<0.001?'':expT(r);
+  return `y_c = C_1 ${term(r1.re)} + C_2 ${term(r2.re)}`;
 }
 
-function isRootMatch(roots,alpha,beta){
-  // Check if alpha ± beta*i is already a root
-  for(const r of roots){
-    if(Math.abs(r.re-alpha)<0.001&&Math.abs(r.im-beta)<0.001) return true;
-    if(Math.abs(r.re-alpha)<0.001&&Math.abs(r.im+beta)<0.001) return true;
-  }
-  return false;
-}
-
-function isDoubleRootMatch(roots,alpha,beta){
-  if(roots.length<2)return false;
-  let count=0;
-  for(const r of roots){
-    if(Math.abs(r.re-alpha)<0.001&&Math.abs(Math.abs(r.im)-beta)<0.001) count++;
-  }
-  return count>=2;
+// How many times α + βi is a root of the characteristic equation (0, 1, or 2).
+// A complex-conjugate pair counts once: it is two different roots, each simple.
+function rootMultiplicity(roots,alpha,beta){
+  const tol=1e-3;
+  if(roots.length===1&&roots[0].repeated)
+    return (beta<tol&&Math.abs(roots[0].re-alpha)<tol)?2:0;
+  return roots.some(r=>Math.abs(r.re-alpha)<tol&&Math.abs(r.im-beta)<tol)?1:0;
 }
 
 function build(){
@@ -219,10 +218,7 @@ function build(){
   }
 
   // Check modification (how many times alpha_g±i*beta_g is a root)
-  const match1=isRootMatch(roots,alpha_g,beta_g);
-  const match2=isDoubleRootMatch(roots,alpha_g,beta_g);
-  if(match2) modNeeded=2;
-  else if(match1) modNeeded=1;
+  modNeeded=rootMultiplicity(roots,alpha_g,beta_g);
 
   const polyPart=(deg)=>{
     if(deg===0)return 'A';
@@ -236,8 +232,8 @@ function build(){
       explanation=`Forcing is a degree-${n} polynomial.<br>Standard trial: $(${polyPart(n)})$. No exponential, so look at α=0, β=0.<br>Check if r=0 is a characteristic root.`;
       break;
     case 'exp':
-      trialBase=`${tMod(modNeeded)}A e^{${alpha>0?'+':''}${alpha}t}`;
-      explanation=`Forcing is $e^{${alpha}t}$ (α=${alpha}, β=0).<br>Standard trial: $Ae^{${alpha}t}$.`;
+      trialBase=`${tMod(modNeeded)}A ${expT(alpha)}`;
+      explanation=`Forcing is $${expT(alpha)}$ (α=${alpha}, β=0).<br>Standard trial: $A${expT(alpha)}$.`;
       break;
     case 'sin':
       trialBase=`${tMod(modNeeded)}(A\\cos(${beta_}t)+B\\sin(${beta_}t))`;
@@ -249,11 +245,11 @@ function build(){
       break;
     case 'exp_sin':
     case 'exp_cos':
-      trialBase=`${tMod(modNeeded)}e^{${alpha}t}(A\\cos(${beta_}t)+B\\sin(${beta_}t))`;
+      trialBase=`${tMod(modNeeded)}${expT(alpha)}(A\\cos(${beta_}t)+B\\sin(${beta_}t))`;
       explanation=`Forcing is $e^{${alpha}t}(\\sin/\\cos)(${beta_}t)$ (α=${alpha}, β=${beta_}).<br>Trial combines exponential envelope with sinusoidal pair.`;
       break;
     case 'poly_exp':
-      trialBase=`${tMod(modNeeded)}e^{${alpha}t}(${polyPart(n)})`;
+      trialBase=`${tMod(modNeeded)}${expT(alpha)}(${polyPart(n)})`;
       explanation=`Forcing is $t^${n}e^{${alpha}t}$ (α=${alpha}, β=0).<br>Multiply the standard polynomial trial by the exponential.`;
       break;
   }

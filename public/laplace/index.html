@@ -108,7 +108,7 @@
     <!-- ── Plots ─────────────────────────────────────────────────────────── -->
     <div>
       <div id="table-plots">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+        <div class="two-plots">
           <div class="plot-box" id="ft-plot" style="height:280px;"></div>
           <div class="plot-box" id="Fs-plot" style="height:280px;"></div>
         </div>
@@ -137,6 +137,17 @@ document.querySelectorAll('input[name="mode"]').forEach(r=>r.addEventListener('c
 
 function factorial(n){let r=1;for(let i=2;i<=n;i++)r*=i;return r;}
 
+// ── Formatting helpers: textbook-style signs and numbers ─────────────────────
+const num = x => String(parseFloat((+x).toFixed(4)));
+function sMinus(a){ const v = +num(a); return v === 0 ? 's' : v > 0 ? `s-${v}` : `s+${-v}`; }
+function expPart(a){ const v = +num(a); return v === 0 ? '' : `e^{${v === 1 ? '' : v === -1 ? '-' : v}t}`; }
+function term(coef, sym){          // " + 3s", " - s", "" for a zero coefficient
+  const v = +num(coef);
+  if (v === 0) return '';
+  const mag = Math.abs(v) === 1 && sym ? '' : String(Math.abs(v));
+  return ` ${v < 0 ? '-' : '+'} ${mag}${sym}`;
+}
+
 function buildTable(){
   const sel=document.getElementById('func-sel').value;
   const a=+document.getElementById('a-s').value;
@@ -150,68 +161,69 @@ function buildTable(){
   const tMax=8;
   const Nt=400;
   const ts=Array.from({length:Nt+1},(_,i)=>tMax*i/Nt);
-  let ft, Fs_formula, f_formula;
+  let ft, Fs_formula, f_formula, Fexact;
 
   switch(sel){
     case 'exp':
       ft=ts.map(t=>Math.exp(a*t));
-      f_formula=`e^{${a>=0?'+':''}${a}t}`;
-      Fs_formula=`F(s)=\\frac{1}{s-${a}} \\quad(s>${a})`;
+      f_formula=expPart(a)||'1';
+      Fs_formula=`F(s)=\\frac{1}{${sMinus(a)}} \\quad(s>${num(a)})`;
+      Fexact=s=>1/(s-a);
       break;
     case 'tn':
       ft=ts.map(t=>Math.pow(t,n));
       f_formula=`t^{${n}}`;
       Fs_formula=`F(s)=\\frac{${factorial(n)}}{s^{${n+1}}}`;
+      Fexact=s=>factorial(n)/Math.pow(s,n+1);
       break;
     case 'sin':
       ft=ts.map(t=>Math.sin(om*t));
       f_formula=`\\sin(${om}t)`;
-      Fs_formula=`F(s)=\\frac{${om}}{s^2+${om*om}}`;
+      Fs_formula=`F(s)=\\frac{${num(om)}}{s^2+${num(om*om)}}`;
+      Fexact=s=>om/(s*s+om*om);
       break;
     case 'cos':
       ft=ts.map(t=>Math.cos(om*t));
       f_formula=`\\cos(${om}t)`;
-      Fs_formula=`F(s)=\\frac{s}{s^2+${om*om}}`;
+      Fs_formula=`F(s)=\\frac{s}{s^2+${num(om*om)}}`;
+      Fexact=s=>s/(s*s+om*om);
       break;
     case 'damp_sin':
       ft=ts.map(t=>Math.exp(a*t)*Math.sin(om*t));
-      f_formula=`e^{${a}t}\\sin(${om}t)`;
-      Fs_formula=`F(s)=\\frac{${om}}{(s-${a})^2+${om*om}}`;
+      f_formula=`${expPart(a)}\\sin(${num(om)}t)`;
+      Fs_formula=`F(s)=\\frac{${num(om)}}{(${sMinus(a)})^2+${num(om*om)}}`;
+      Fexact=s=>om/((s-a)*(s-a)+om*om);
       break;
     case 'damp_cos':
       ft=ts.map(t=>Math.exp(a*t)*Math.cos(om*t));
-      f_formula=`e^{${a}t}\\cos(${om}t)`;
-      Fs_formula=`F(s)=\\frac{s-${a}}{(s-${a})^2+${om*om}}`;
+      f_formula=`${expPart(a)}\\cos(${num(om)}t)`;
+      Fs_formula=`F(s)=\\frac{${sMinus(a)}}{(${sMinus(a)})^2+${num(om*om)}}`;
+      Fexact=s=>(s-a)/((s-a)*(s-a)+om*om);
       break;
     case 'step':
       const ta=Math.max(0,a);
       ft=ts.map(t=>t>=ta?1:0);
       f_formula=`u(t-${ta.toFixed(1)})`;
-      Fs_formula=`F(s)=\\frac{e^{-${ta.toFixed(1)}s}}{s}`;
+      Fs_formula=ta===0?`F(s)=\\frac{1}{s}`:`F(s)=\\frac{e^{-${ta.toFixed(1)}s}}{s}`;
+      Fexact=s=>Math.exp(-ta*s)/s;
       break;
     case 'tn_exp':
       ft=ts.map(t=>Math.pow(t,n)*Math.exp(a*t));
-      f_formula=`t^{${n}}e^{${a}t}`;
-      Fs_formula=`F(s)=\\frac{${factorial(n)}}{(s-${a})^{${n+1}}}`;
+      f_formula=`t^{${n}}${expPart(a)}`;
+      Fs_formula=`F(s)=\\frac{${factorial(n)}}{(${sMinus(a)})^{${n+1}}}`;
+      Fexact=s=>factorial(n)/Math.pow(s-a,n+1);
       break;
   }
 
   // Clip for display
   const ftCl=ft.map(v=>Math.max(-20,Math.min(20,v)));
 
-  // Numerically compute |F(s)| for s from 0+ to sMax
-  const sMin=Math.max(0.1,a+0.1), sMax=sMin+6;
+  // Exact transform, plotted for real s inside the region of convergence
+  const grows=['exp','damp_sin','damp_cos','tn_exp'].includes(sel);
+  const sMin=(grows?Math.max(0,a):0)+0.25, sMax=sMin+6;
   const Ns=300;
   const sArr=Array.from({length:Ns},(_,i)=>sMin+(sMax-sMin)*i/Ns);
-  const FsArr=sArr.map(s=>{
-    // Numerical Laplace: integrate only over [0,tMax] where ft is defined
-    let sum=0;
-    const h_s=0.01;
-    for(let t=h_s/2;t<tMax;t+=h_s){
-      sum+=Math.exp(-s*t)*ft[Math.min(Math.round(t/tMax*Nt),Nt)]*h_s;
-    }
-    return sum;
-  });
+  const FsArr=sArr.map(s=>{const v=Fexact(s);return isFinite(v)?v:null;});
 
   document.getElementById('formula-box').innerHTML=`$f(t) = ${f_formula}$<br><br>$${Fs_formula}$`;
   if(window.renderMathInElement) renderMathInElement(document.getElementById('formula-box'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
@@ -287,13 +299,16 @@ function buildIVP(){
   const gn=gNames[gSel];
   const gLs=gS[gSel];
 
-  const charStr=`s^2 + ${a}s + ${b}`;
+  const charStr=`s^2${term(a,'s')}${term(b,'')}`;
+  const aTerm=+num(a)===0?'':` + ${num(a)}[sY${term(-y0,'')}]`;
+  const rhs=(gLs==='0'?'':gLs)+term(y0,'s')+term(yp0+a*y0,'');
+  const rhsClean=rhs.replace(/^ \+ /,'').replace(/^ - /,'-')||'0';
   const steps=`<b>Step 1:</b> Transform the ODE<br>
-$[s^2 Y - ${y0}s - ${yp0}] + ${a}[sY - ${y0}] + ${b}Y = ${gLs}$<br><br>
+$[s^2 Y${term(-y0,'s')}${term(-yp0,'')}]${aTerm}${term(b,'Y')} = ${gLs}$<br><br>
 <b>Step 2:</b> Solve for Y(s)<br>
-$Y(s)(${charStr}) = ${gLs} + ${y0}s + (${yp0+a*y0})$<br>
-$Y(s) = \\dfrac{${gLs} + ${y0}s + (${yp0+a*y0})}{${charStr}}$<br><br>
-<b>Step 3:</b> Partial fractions + inverse Laplace → y(t)`;
+$Y(s)(${charStr}) = ${rhsClean}$<br>
+$Y(s) = \\dfrac{${rhsClean}}{${charStr}}$<br><br>
+<b>Step 3:</b> Partial fractions and the inverse transform give y(t), plotted above (computed numerically as a check).`;
 
   document.getElementById('ivp-steps').innerHTML=steps;
   if(window.renderMathInElement) renderMathInElement(document.getElementById('ivp-steps'),{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
@@ -301,14 +316,14 @@ $Y(s) = \\dfrac{${gLs} + ${y0}s + (${yp0+a*y0})}{${charStr}}$<br><br>
   // Y(s) magnitude vs real s
   const sMin=0.1,sMax=8,Ns=300;
   const sArr=Array.from({length:Ns},(_,i)=>sMin+(sMax-sMin)*i/Ns);
-  // Just show denominator magnitude (char poly)
-  const charMag=sArr.map(s=>{const v=1/Math.abs(s*s+a*s+b);return isFinite(v)?v:null;});
-  Plotly.react('ivp-Ys-plot',[{x:sArr,y:charMag,mode:'lines',line:{color:'#b57ff5',width:2},name:'1/|s²+as+b|'}],{
+  const Gof={zero:s=>0, exp_ivp:s=>1/(s+1), sin_ivp:s=>1/(s*s+1), cos_ivp:s=>s/(s*s+4), const_ivp:s=>1/s}[gSel];
+  const Ys=sArr.map(s=>{const v=(Gof(s)+y0*s+yp0+a*y0)/(s*s+a*s+b);return isFinite(v)?v:null;});
+  Plotly.react('ivp-Ys-plot',[{x:sArr,y:Ys,mode:'lines',line:{color:'#b57ff5',width:2},name:'Y(s)'}],{
     paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
     font:{color:'#D2E0EE',size:11},
     margin:{t:10,r:20,b:40,l:55},
     xaxis:{range:[sMin,sMax],title:'s (real)',gridcolor:'rgba(255,255,255,0.06)'},
-    yaxis:{title:'|Y(s)| shape',gridcolor:'rgba(255,255,255,0.06)'},
+    yaxis:{title:'Y(s) for real s',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:false,
   },{responsive:true,displayModeBar:false});
 }

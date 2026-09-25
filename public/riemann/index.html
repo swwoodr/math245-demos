@@ -62,7 +62,7 @@
                oninput="syncN('sl'); schedule()">
       </div>
       <div id="n-note" style="font-size:0.72rem;color:var(--muted);margin-top:0.2rem;display:none;">
-        Simpson's requires even n — using <strong id="n-eff-display"></strong>
+        Simpson's needs an even n ≥ 2 — using <strong id="n-eff-display"></strong>
       </div>
 
       <div class="ctrl-section">Method</div>
@@ -157,9 +157,10 @@ function trueIntegral(f, a, b) {
   return s * h / 3;
 }
 
-// ── For Simpson's, n must be even ───────────────────────────────────────────
+// ── For Simpson's, n must be even and at least 2 ────────────────────────────
 function effN(n, method) {
-  return (method === 'simp' && n % 2 !== 0) ? n - 1 : n;
+  if (method !== 'simp') return n;
+  return n < 2 ? 2 : (n % 2 !== 0 ? n - 1 : n);
 }
 
 // ── Compute the numerical sum ───────────────────────────────────────────────
@@ -340,7 +341,13 @@ function update() {
   const nRaw   = Math.max(1, parseInt(document.getElementById('n-in').value) || 1);
   const method = document.querySelector('input[name="method"]:checked').value;
 
-  if (!isFinite(a) || !isFinite(b) || a >= b) return;
+  if (!isFinite(a) || !isFinite(b) || a >= b) {
+    document.getElementById('latex-line').innerHTML =
+      '<span style="color:#fca5a5;">Enter numbers with a &lt; b to define the interval.</span>';
+    ['m-rs', 'm-true', 'm-abs', 'm-rel'].forEach(id => document.getElementById(id).textContent = '—');
+    Plotly.react('main-plot', [], {...PLOT_LAYOUT}, CFG);
+    return;
+  }
 
   const n = effN(nRaw, method);
 
@@ -393,8 +400,6 @@ function drawConvergence(f, a, b) {
   const errs    = {left:[], right:[], mid:[], trap:[], simp:[]};
 
   for (const ni of nVals) {
-    const dxi = (b - a) / ni;
-    // Left
     errs.left.push(Math.abs(computeSum(f,a,b,ni,'left')  - trueVal));
     errs.right.push(Math.abs(computeSum(f,a,b,ni,'right') - trueVal));
     errs.mid.push(Math.abs(computeSum(f,a,b,ni,'mid')   - trueVal));
@@ -404,11 +409,11 @@ function drawConvergence(f, a, b) {
     errs.simp.push(Math.abs(computeSum(f,a,b,ni2,'simp') - trueVal));
   }
 
-  // Reference lines anchored at n=2 error of left method
-  const anchor = errs.left[0] || 1;
-  const ref1n  = nVals.map(n => anchor / n);
-  const ref1n2 = nVals.map(n => anchor / (n * n));
-  const ref1n4 = nVals.map(n => anchor / (n * n * n * n));
+  // Each reference slope starts at its own method's error at n = 2
+  const a1 = errs.left[0] || 1, a2 = errs.trap[0] || 1, a4 = errs.simp[0] || 1;
+  const ref1n  = nVals.map(n => a1 * 2 / n);
+  const ref1n2 = nVals.map(n => a2 * 4 / (n * n));
+  const ref1n4 = nVals.map(n => a4 * 16 / (n * n * n * n));
 
   const traces = [
     {x:nVals, y:errs.left,  mode:'lines', name:'Left',         line:{color:'#4A8FD4',width:2}},

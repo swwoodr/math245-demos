@@ -24,27 +24,38 @@
 
       <div class="ctrl-section">Presets</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;margin-bottom:0.5rem;">
-        <button class="preset-btn" onclick="setPreset('exp_decay')">Exp. Decay</button>
         <button class="preset-btn" onclick="setPreset('underdamped')">Underdamped</button>
         <button class="preset-btn" onclick="setPreset('pure_osc')">Pure Oscillation</button>
         <button class="preset-btn" onclick="setPreset('overdamped')">Overdamped</button>
-        <button class="preset-btn" onclick="setPreset('resonance')">Resonance</button>
-        <button class="preset-btn" onclick="setPreset('exp_growth')">Exp. Growth</button>
+        <button class="preset-btn" onclick="setPreset('critical')">Critically Damped</button>
+        <button class="preset-btn" onclick="setPreset('growing_osc')">Growing Oscillation</button>
+        <button class="preset-btn" onclick="setPreset('unstable_real')">Unstable (real pole)</button>
+      </div>
+
+      <div class="ctrl-section">Pole Type</div>
+      <div class="radio-group" style="margin-bottom:0.6rem;">
+        <label class="radio-option"><input type="radio" name="ptype" value="complex" checked onchange="onType()"> Complex pair σ ± ωi</label>
+        <label class="radio-option"><input type="radio" name="ptype" value="real2" onchange="onType()"> Two real poles σ₁, σ₂</label>
+        <label class="radio-option"><input type="radio" name="ptype" value="repeated" onchange="onType()"> Repeated real pole σ</label>
       </div>
 
       <div class="ctrl-section">Pole Location</div>
-      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 0.4rem;">Complex poles always appear in conjugate pairs.</p>
       <div class="ctrl-row">
-        <div class="ctrl-label">Real part σ <span class="ctrl-val" id="sig-v">−1.00</span></div>
-        <input type="range" id="sig-s" min="-4" max="2" step="0.05" value="-1"
+        <div class="ctrl-label"><span id="sig-name">Real part σ</span> <span class="ctrl-val" id="sig-v">−0.50</span></div>
+        <input type="range" id="sig-s" min="-4" max="2" step="0.05" value="-0.5"
                oninput="sv('sig-v',this.value,2); schedule()">
       </div>
-      <div class="ctrl-row">
+      <div class="ctrl-row" id="om-row">
         <div class="ctrl-label">Imag part ω <span class="ctrl-val" id="om-v">2.00</span></div>
-        <input type="range" id="om-s" min="0" max="5" step="0.05" value="2"
+        <input type="range" id="om-s" min="0.05" max="5" step="0.05" value="2"
                oninput="sv('om-v',this.value,2); schedule()">
       </div>
-      <p style="font-size:0.78rem;color:var(--muted);margin:0.2rem 0 0;">ω = 0 → two real poles at s = σ</p>
+      <div class="ctrl-row" id="sig2-row" style="display:none;">
+        <div class="ctrl-label">Second pole σ₂ <span class="ctrl-val" id="sig2-v">−2.00</span></div>
+        <input type="range" id="sig2-s" min="-4" max="2" step="0.05" value="-2"
+               oninput="sv('sig2-v',this.value,2); schedule()">
+      </div>
+      <p style="font-size:0.78rem;color:var(--muted);margin:0.2rem 0 0;">The signal shown is the inverse transform of $Y(s) = \dfrac{1}{(s - p_1)(s - p_2)}$.</p>
 
       <div class="ctrl-section">Display</div>
       <div class="ctrl-row">
@@ -61,13 +72,13 @@
         Left half-plane (σ &lt; 0) → stable<br>
         Right half-plane (σ &gt; 0) → unstable<br>
         Imaginary axis (σ = 0) → marginally stable<br>
-        Repeated imag. poles → resonance
+        Repeated poles on the imaginary axis → resonance, t·sin(ωt) (see Forced Oscillations)
       </div>
     </div>
 
     <!-- ── Plots ─────────────────────────────────────────────────────────── -->
     <div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+      <div class="two-plots">
         <div class="plot-box" id="splane-plot" style="height:300px;"></div>
         <div class="plot-box" id="time-plot" style="height:300px;"></div>
       </div>
@@ -98,103 +109,105 @@ function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).to
 function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
 
 const PRESETS = {
-  exp_decay:    {sig:-1, om:0},
-  underdamped:  {sig:-0.5, om:2},
-  pure_osc:     {sig:0, om:2},
-  overdamped:   {sig:-2, om:0},
-  resonance:    {sig:0, om:0},  // Repeated poles at origin → y(t)=t (linear growth)
-  exp_growth:   {sig:0.5, om:1},
+  underdamped:   {type:'complex',  sig:-0.5, om:2},
+  pure_osc:      {type:'complex',  sig:0,    om:2},
+  growing_osc:   {type:'complex',  sig:0.3,  om:1.5},
+  overdamped:    {type:'real2',    sig:-0.5, sig2:-2},
+  critical:      {type:'repeated', sig:-1},
+  unstable_real: {type:'real2',    sig:0.4,  sig2:-1.5},
 };
 
-function setPreset(name) {
-  const p = PRESETS[name];
-  document.getElementById('sig-s').value=p.sig;
-  document.getElementById('om-s').value=p.om;
-  sv('sig-v',p.sig,2); sv('om-v',p.om,2);
+function ptype() { return document.querySelector('input[name="ptype"]:checked').value; }
+function onType() {
+  const t = ptype();
+  document.getElementById('om-row').style.display = t === 'complex' ? '' : 'none';
+  document.getElementById('sig2-row').style.display = t === 'real2' ? '' : 'none';
+  document.getElementById('sig-name').textContent = t === 'real2' ? 'First pole σ₁' : t === 'repeated' ? 'Pole σ' : 'Real part σ';
   schedule();
 }
 
-function build() {
-  const sig=+document.getElementById('sig-s').value;
-  const om=+document.getElementById('om-s').value;
-  const tMax=+document.getElementById('T-s').value;
+function setPreset(name) {
+  const p = PRESETS[name];
+  document.querySelector(`input[name="ptype"][value="${p.type}"]`).checked = true;
+  document.getElementById('sig-s').value = p.sig; sv('sig-v', p.sig, 2);
+  if (p.om !== undefined) { document.getElementById('om-s').value = p.om; sv('om-v', p.om, 2); }
+  if (p.sig2 !== undefined) { document.getElementById('sig2-s').value = p.sig2; sv('sig2-v', p.sig2, 2); }
+  onType();
+}
 
-  const isReal = om < 0.01;
-  // Poles: s = sig ± om*i
-  const p1re=sig, p1im=isReal?0:om;
-  const p2re=sig, p2im=isReal?0:-om;
+function build() {
+  const type = ptype();
+  const sig = +document.getElementById('sig-s').value;
+  const om = +document.getElementById('om-s').value;
+  let sig2 = +document.getElementById('sig2-s').value;
+  const tMax = +document.getElementById('T-s').value;
+  const effType = (type === 'real2' && Math.abs(sig - sig2) < 1e-9) ? 'repeated' : type;
+  if (effType === 'repeated') sig2 = sig;
+
+  const poles = effType === 'complex' ? [[sig, om], [sig, -om]] : [[sig, 0], [sig2, 0]];
+  const maxRe = Math.max(poles[0][0], poles[1][0]);
 
   // ── s-plane ─────────────────────────────────────────────────────────────────
-  const sRange=Math.max(5, Math.abs(sig)+1, om+1);
-
-  // Shading: left=stable, right=unstable
-  const spTraces=[
-    // Axes
+  const sRange = Math.max(5, Math.abs(sig) + 1, Math.abs(sig2) + 1, om + 1);
+  const spTraces = [
     {x:[-sRange,sRange],y:[0,0],mode:'lines',line:{color:'rgba(255,255,255,0.2)',width:1},hoverinfo:'skip',showlegend:false},
     {x:[0,0],y:[-sRange,sRange],mode:'lines',line:{color:'rgba(255,255,255,0.5)',width:2},name:'Imaginary axis',hoverinfo:'skip'},
-    // Imaginary axis label annotation handled via layout
   ];
+  const f2 = v => (Math.abs(v) < 5e-9 ? 0 : v).toFixed(2);
+  const poleName = effType === 'complex' ? `p = ${f2(sig)} ± ${f2(om)}i`
+                 : effType === 'repeated' ? `p = ${f2(sig)} (double)` : `p₁ = ${f2(sig)}, p₂ = ${f2(sig2)}`;
+  spTraces.push({x:poles.map(q => q[0]), y:poles.map(q => q[1]), mode:'markers', type:'scatter',
+    marker:{color:'#ff6b8a', size: effType === 'repeated' ? 20 : 16, symbol:'x', line:{color:'#ff6b8a', width:3}},
+    name:poleName, hovertemplate:'s = %{x:.2f} + %{y:.2f}i<extra>Pole</extra>'});
 
-  // Poles
-  if (isReal) {
-    spTraces.push({x:[sig],y:[0],mode:'markers',type:'scatter',
-      marker:{color:'#ff6b8a',size:16,symbol:'x',line:{color:'#ff6b8a',width:3}},
-      name:`p = ${sig.toFixed(2)}`,
-      hovertemplate:`s = ${sig.toFixed(2)}<extra>Pole</extra>`});
-  } else {
-    spTraces.push({x:[p1re,p2re],y:[p1im,p2im],mode:'markers',type:'scatter',
-      marker:{color:'#ff6b8a',size:16,symbol:'x',line:{color:'#ff6b8a',width:3}},
-      name:`p = ${sig.toFixed(2)} ± ${om.toFixed(2)}i`,
-      hovertemplate:'s = %{x:.2f} + %{y:.2f}i<extra>Pole</extra>'});
-  }
-
-  const spLayout={
+  Plotly.react('splane-plot', spTraces, {
     paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
     font:{color:'#D2E0EE',size:10},
     title:{text:'s-Plane',font:{size:11,color:'#D2E0EE'},x:0.5},
     margin:{t:35,r:15,b:40,l:45},
     xaxis:{range:[-sRange,sRange],title:'σ = Re(s)',gridcolor:'rgba(255,255,255,0.06)',zeroline:false},
-    yaxis:{range:[-sRange,sRange],title:'jω = Im(s)',gridcolor:'rgba(255,255,255,0.06)',zeroline:false,scaleanchor:'x'},
+    yaxis:{range:[-sRange,sRange],title:'Im(s)',gridcolor:'rgba(255,255,255,0.06)',zeroline:false,scaleanchor:'x'},
     showlegend:true,legend:{x:0,y:0,font:{size:8}},
     shapes:[
-      // Left half-plane (stable): faint blue-green
       {type:'rect',x0:-sRange,x1:0,y0:-sRange,y1:sRange,fillcolor:'rgba(93,228,199,0.06)',line:{width:0}},
-      // Right half-plane (unstable): faint red
       {type:'rect',x0:0,x1:sRange,y0:-sRange,y1:sRange,fillcolor:'rgba(255,107,138,0.06)',line:{width:0}},
     ],
     annotations:[
       {x:-sRange*0.5,y:sRange*0.85,xref:'x',yref:'y',text:'Stable',font:{color:'rgba(93,228,199,0.6)',size:10},showarrow:false},
       {x:sRange*0.5,y:sRange*0.85,xref:'x',yref:'y',text:'Unstable',font:{color:'rgba(255,107,138,0.6)',size:10},showarrow:false},
     ],
-  };
-  Plotly.react('splane-plot',spTraces,spLayout,{responsive:true,displayModeBar:false});
+  }, {responsive:true,displayModeBar:false});
 
-  // ── Time signal y(t) ──────────────────────────────────────────────────────────
-  // Y(s)=1/((s-p1)(s-p2)) → y(t) via partial fractions or formula
-  const Nt=600;
-  const ts=Array.from({length:Nt+1},(_,i)=>tMax*i/Nt);
-  let ys, description, descColor;
-
-  if(isReal) {
-    // Y(s) = 1/(s-σ)² → y(t) = t·e^(σt)
-    ys=ts.map(t=>t*Math.exp(sig*t));
-    if(sig<-0.01){description='Repeated real poles: $y(t)=t\\,e^{\\sigma t}\\to 0$ as $t\\to\\infty$ — decays to zero';descColor='#5de4c7';}
-    else if(sig>0.01){description='Repeated real poles: $y(t)=t\\,e^{\\sigma t}\\to\\infty$ — grows unboundedly';descColor='#ff6b8a';}
-    else{description='Repeated poles at origin: $Y(s)=1/s^2$, so $y(t)=t$ — linear growth (engineering resonance)';descColor='#f0a500';}
+  // ── Time signal: inverse transform of 1/((s − p₁)(s − p₂)) ──────────────────
+  const Nt = 600, ts = Array.from({length:Nt+1}, (_, i) => tMax*i/Nt);
+  const tol = 0.01;
+  const eP = v => Math.abs(v) < 5e-9 ? '' : `e^{${f2(v)}t}`;
+  let ys, signalTex;
+  if (effType === 'complex') {
+    ys = ts.map(t => (1/om)*Math.exp(sig*t)*Math.sin(om*t));
+    signalTex = `y(t) = \\tfrac{1}{${f2(om)}}\\,${eP(sig)}\\sin(${f2(om)}t)`;
+  } else if (effType === 'repeated') {
+    ys = ts.map(t => t*Math.exp(sig*t));
+    signalTex = `y(t) = t\\,${eP(sig)}`;
   } else {
-    // Y(s) = 1/((s-σ-jω)(s-σ+jω)) = 1/((s-σ)²+ω²)
-    // → y(t) = (1/ω)·e^(σt)·sin(ωt)
-    ys=ts.map(t=>(1/om)*Math.exp(sig*t)*Math.sin(om*t));
-    if(sig<-0.01){description='Damped oscillation: $y(t)=\\tfrac{1}{\\omega}e^{\\sigma t}\\sin(\\omega t)\\to 0$ — stable (LHP poles)';descColor='#5de4c7';}
-    else if(sig>0.01){description='Unstable oscillation: $y(t)=\\tfrac{1}{\\omega}e^{\\sigma t}\\sin(\\omega t)\\to\\infty$ — unstable (RHP poles)';descColor='#ff6b8a';}
-    else{description='Pure oscillation: $y(t)=\\tfrac{1}{\\omega}\\sin(\\omega t)$ — constant amplitude, marginally stable';descColor='rgba(255,255,255,0.8)';}
+    ys = ts.map(t => (Math.exp(sig*t) - Math.exp(sig2*t))/(sig - sig2));
+    signalTex = `y(t) = \\dfrac{${eP(sig) || '1'} - ${eP(sig2) || '1'}}{${f2(sig - sig2)}}`;
   }
 
+  // Stability: every pole in the open left half-plane is stable; a simple pole on the axis is marginal;
+  // a repeated pole on the axis (or any pole in the right half-plane) is unstable.
+  let stability, descColor, verdict;
+  if (maxRe < -tol) { stability = 'Stable (left half-plane)'; descColor = '#5de4c7'; verdict = 'decays to zero'; }
+  else if (maxRe > tol) { stability = 'Unstable (right half-plane)'; descColor = '#ff6b8a'; verdict = 'grows without bound'; }
+  else if (effType === 'repeated') { stability = 'Unstable (double pole on the axis)'; descColor = '#ff6b8a'; verdict = 'grows like t'; }
+  else { stability = 'Marginally stable (simple pole on the axis)'; descColor = '#f0a500'; verdict = effType === 'complex' ? 'oscillates with constant amplitude' : 'levels off at a constant'; }
+  const kind = effType === 'complex' ? 'Complex poles: oscillation' : effType === 'repeated' ? 'Repeated real pole' : 'Two real poles: no oscillation';
+  const description = `${kind} — $${signalTex}$ ${verdict}.`;
   const tsTraces=[{x:ts,y:ys.map(y=>isFinite(y)?y:null),mode:'lines',
-    line:{color:descColor||'#4d9fff',width:2.2},name:'y(t)'}];
+    line:{color:descColor,width:2.2},name:'y(t)'}];
 
-  // Envelope
-  if(!isReal&&sig<0){
+  // Envelope ±(1/ω)e^{σt} for complex poles
+  if(effType==='complex'){
     const env=ts.map(t=>(1/om)*Math.exp(sig*t));
     tsTraces.push({x:ts,y:env,mode:'lines',line:{color:'rgba(240,165,0,0.4)',width:1.2,dash:'dash'},name:'Envelope',hoverinfo:'skip'});
     tsTraces.push({x:ts,y:env.map(v=>-v),mode:'lines',line:{color:'rgba(240,165,0,0.4)',width:1.2,dash:'dash'},showlegend:false,hoverinfo:'skip'});
@@ -210,15 +223,8 @@ function build() {
     showlegend:true,legend:{x:1.01,y:1,font:{size:8}},
   },{responsive:true,displayModeBar:false});
 
-  // Info
-  const stability=sig<-0.01?'Stable (LHP)':sig>0.01?'Unstable (RHP)':'Marginally stable (jω-axis)';
-  const stabColor=sig<-0.01?'#5de4c7':sig>0.01?'#ff6b8a':'#f0a500';
-  const poleStr=isReal?`s = ${sig.toFixed(3)} (repeated)`:`s = ${sig.toFixed(3)} ± ${om.toFixed(3)}j`;
-
-  document.getElementById('pole-info').innerHTML=
-    `<b>Poles:</b> ${poleStr}<br>` +
-    `<b>Stability:</b> <span style="color:${stabColor}">${stability}</span><br>` +
-    (isReal?`<b>Signal:</b> t·e<sup>${sig.toFixed(2)}t</sup>`:`<b>Signal:</b> (1/ω)·e<sup>${sig.toFixed(2)}t</sup>·sin(${om.toFixed(2)}t)`);
+  document.getElementById('pole-info').innerHTML =
+    `<b>Poles:</b> ${poleName}<br><b>Stability:</b> <span style="color:${descColor}">${stability}</span>`;
 
   const descEl=document.getElementById('desc-text');
   descEl.style.color=descColor;
@@ -226,7 +232,7 @@ function build() {
   if(window.renderMathInElement) renderMathInElement(descEl,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
 }
 
-window.addEventListener('load', build);
+window.addEventListener('load', () => setPreset('underdamped'));
 </script>
 </body>
 </html>

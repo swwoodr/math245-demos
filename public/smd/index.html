@@ -29,9 +29,12 @@
                oninput="sv('m-val',this.value,'');schedule()">
       </div>
       <div class="ctrl-row">
-        <div class="ctrl-label">Damping c <span class="ctrl-val" id="c-val">0.4</span></div>
-        <input type="range" id="c-sl" min="0" max="5" step="0.1" value="0.4"
-               oninput="sv('c-val',this.value,'');schedule()">
+        <div class="ctrl-label">Damping c <span class="ctrl-val" id="c-val">0.40</span></div>
+        <input type="range" id="c-sl" min="0" max="25" step="any" value="0.4"
+               oninput="document.getElementById('c-val').textContent=(+this.value).toFixed(2);schedule()">
+      </div>
+      <div class="ctrl-row">
+        <button class="btn" style="padding:0.35rem 0.8rem; font-size:0.82rem;" onclick="setCritical()">Set critical damping c = 2√(mk)</button>
       </div>
       <div class="ctrl-row">
         <div class="ctrl-label">Spring k (N/m) <span class="ctrl-val" id="k-val">12.0</span></div>
@@ -283,6 +286,13 @@ function build() {
 
 // ── Debounce ──────────────────────────────────────────────────────────────────
 let _t;
+function setCritical() {
+  const m = +document.getElementById('m-sl').value, k = +document.getElementById('k-sl').value;
+  const cc = 2*Math.sqrt(m*k), el = document.getElementById('c-sl');
+  el.value = cc;
+  document.getElementById('c-val').textContent = cc.toFixed(2);
+  schedule();
+}
 function schedule() { clearTimeout(_t); _t=setTimeout(build, 120); }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

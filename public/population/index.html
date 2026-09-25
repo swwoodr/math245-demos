@@ -150,7 +150,7 @@ function buildExp(P0, k, T, ts) {
   const traces = [{
     x:ts, y:ys, mode:'lines',
     line:{color:'#4ADE80', width:3},
-    name:`P(t) = P₀e^{kt}`
+    name:`P(t) = P₀e^(kt)`
   }];
 
   // Reference line at P0
@@ -175,8 +175,8 @@ function buildExp(P0, k, T, ts) {
   const dblHalf = Math.log(2) / Math.abs(k);
   document.getElementById('m-P0').textContent  = fmtN(P0,0);
   document.getElementById('m-PT').textContent  = fmtN(PT,2);
-  document.getElementById('m3-label').textContent = k >= 0 ? 'Doubling Time' : 'Half-Life';
-  document.getElementById('m-key').textContent  = isFinite(dblHalf) ? fmtN(dblHalf,3)+' t-units' : '—';
+  document.getElementById('m3-label').textContent = k > 0 ? 'Doubling Time' : k < 0 ? 'Half-Life' : 'Doubling Time';
+  document.getElementById('m-key').textContent  = isFinite(dblHalf) ? fmtN(dblHalf,3)+' t-units' : 'none (k = 0)';
   document.getElementById('m4-label').textContent = 'Rate k';
   document.getElementById('m-extra').textContent = fmtN(k,3);
 

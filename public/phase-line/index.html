@@ -125,24 +125,38 @@ function findEquilibria(f, pMin, pMax) {
   const n = 2000;
   const dp = (pMax - pMin) / n;
   const eqs = [];
-  let prev = f(pMin);
+  const vals = [];
+  for (let i = 0; i <= n; i++) vals.push(f(pMin + i * dp));
+  const scale = Math.max(1, ...vals.filter(isFinite).map(Math.abs));
+  const addEq = eq => { if (!eqs.some(e => Math.abs(e - eq) < 1e-6)) eqs.push(eq); };
+
   for (let i = 1; i <= n; i++) {
-    const p = pMin + i * dp;
-    const curr = f(p);
-    if (!isFinite(prev) || !isFinite(curr)) { prev = curr; continue; }
-    if (prev * curr <= 0) {
-      // bisect
+    const prev = vals[i-1], curr = vals[i], p = pMin + i * dp;
+    if (!isFinite(prev) || !isFinite(curr)) continue;
+    if (curr === 0) { addEq(p); continue; }            // grid point sits exactly on a root
+    if (prev === 0) continue;                          // already recorded on the previous step
+    if (prev * curr < 0) {
+      // Sign change: bisect
       let lo = p - dp, hi = p;
-      for (let k = 0; k < 50; k++) {
+      for (let k = 0; k < 60; k++) {
         const mid = (lo + hi) / 2;
         if (f(lo) * f(mid) <= 0) hi = mid; else lo = mid;
       }
+      addEq((lo + hi) / 2);
+    } else if (i < n && isFinite(vals[i+1]) && Math.abs(curr) <= Math.abs(prev) && Math.abs(curr) <= Math.abs(vals[i+1])
+               && curr * vals[i+1] > 0) {
+      // No sign change but |f| dips: a tangent (double) root, like (P − 2)², touches zero without crossing
+      let lo = p - dp, hi = p + dp;
+      const gr = (Math.sqrt(5) - 1) / 2;
+      for (let k = 0; k < 80; k++) {
+        const m1 = hi - gr * (hi - lo), m2 = lo + gr * (hi - lo);
+        if (Math.abs(f(m1)) < Math.abs(f(m2))) hi = m2; else lo = m1;
+      }
       const eq = (lo + hi) / 2;
-      if (eqs.length === 0 || Math.abs(eq - eqs[eqs.length-1]) > 1e-6) eqs.push(eq);
+      if (Math.abs(f(eq)) < 1e-9 * scale) addEq(eq);
     }
-    prev = curr;
   }
-  return eqs;
+  return eqs.sort((a, b) => a - b);
 }
 
 function classifyEq(f, eq) {

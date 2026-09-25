@@ -30,8 +30,11 @@
       </div>
       <div class="ctrl-row">
         <div class="ctrl-label">Damping c <span class="ctrl-val" id="c-v">1.00</span></div>
-        <input type="range" id="c-s" min="0" max="10" step="0.05" value="1"
+        <input type="range" id="c-s" min="0" max="10" step="any" value="1"
                oninput="sv('c-v',this.value,2); schedule()">
+      </div>
+      <div class="ctrl-row">
+        <button class="btn" style="padding:0.35rem 0.8rem; font-size:0.82rem;" onclick="setCritical()">Set critical damping c = 2√(mk)</button>
       </div>
       <div class="ctrl-row">
         <div class="ctrl-label">Stiffness k <span class="ctrl-val" id="k-v">2.00</span></div>
@@ -71,7 +74,7 @@
 
     <!-- ── Plots ─────────────────────────────────────────────────────────── -->
     <div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem;">
+      <div class="two-plots">
         <div class="plot-box" id="roots-plot" style="height:280px;"></div>
         <div class="plot-box" id="sol-plot" style="height:280px;"></div>
       </div>
@@ -84,6 +87,12 @@
 <script>
 let scheduledRaf = null;
 function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
+function setCritical(){
+  const m=+document.getElementById('m-s').value, k=+document.getElementById('k-s').value, cc=2*Math.sqrt(m*k);
+  const el=document.getElementById('c-s');
+  if(cc>+el.max) el.max=Math.ceil(cc);
+  el.value=cc; sv('c-v',cc,2); build();
+}
 function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
 
 function build() {

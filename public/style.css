@@ -123,15 +123,24 @@ a { color: var(--blue-bright); text-decoration: none; }
   color: var(--muted);
   margin-bottom: 1.25rem;
   min-height: 1.5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .demo-layout {
   display: grid;
-  grid-template-columns: 255px 1fr;
+  grid-template-columns: 255px minmax(0, 1fr);   /* minmax(0, …) lets wide plots/equations shrink instead of widening the page */
   gap: 1.25rem;
   align-items: start;
 }
-@media (max-width: 720px) { .demo-layout { grid-template-columns: 1fr; } }
+@media (max-width: 720px) {
+  .demo-layout { grid-template-columns: minmax(0, 1fr); }
+  .controls { position: static; }
+}
+.plot-panel > * { min-width: 0; }
+.two-plots { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.75rem; }
+@media (max-width: 860px) { .two-plots { grid-template-columns: minmax(0, 1fr); } }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.1rem 0; }
 
 /* ── Controls sidebar ─────────────────────────────────────────────────────── */
 .controls {
@@ -232,6 +241,7 @@ select:focus {
 
 /* ── Metric cards ─────────────────────────────────────────────────────────── */
 .metrics-row { display: grid; gap: 0.75rem; }
+.metrics-row.cols-2 { grid-template-columns: repeat(2, 1fr); }
 .metrics-row.cols-3 { grid-template-columns: repeat(3, 1fr); }
 .metrics-row.cols-4 { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 600px) {
@@ -247,6 +257,7 @@ select:focus {
   text-align: center;
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+  min-width: 0;
 }
 .metric-label {
   font-size: 0.6875rem;
@@ -261,6 +272,7 @@ select:focus {
   font-weight: 700;
   color: var(--blue-bright);
   font-family: var(--font-mono);
+  overflow-wrap: anywhere;
 }
 .metric-value.good  { color: var(--success); }
 .metric-value.plain { color: var(--white); }

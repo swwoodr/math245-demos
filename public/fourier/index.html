@@ -29,6 +29,7 @@
           <option value="abssin">|sin(x)|</option>
           <option value="halfsin">Half-rectified sine</option>
         </select>
+        <div id="func-eq" style="text-align:center; margin-top:0.5rem; min-height:2.2rem;"></div>
       </div>
 
       <div class="ctrl-section">Terms</div>
@@ -42,7 +43,7 @@
       <div class="ctrl-row">
         <label class="radio-option">
           <input type="checkbox" id="show-harm" onchange="build()">
-          Show individual harmonics
+          Show individual harmonics (first 5)
         </label>
       </div>
       <div class="ctrl-row">
@@ -53,6 +54,7 @@
       </div>
 
       <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border);">
+        <div style="font-size:0.72rem;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:0.3rem;">Fourier coefficients</div>
         <div id="coeff-box" style="font-size:0.8rem;color:var(--muted);line-height:1.8;"></div>
       </div>
 
@@ -77,7 +79,7 @@ const PI = Math.PI;
 // ── Function definitions ──────────────────────────────────────────────────────
 const FUNCS = {
   square:   {
-    f: x => x > 0 && x < PI ? 1 : (x === 0 || x === PI ? 0 : -1),
+    f: x => x > 0 && x < PI ? 1 : (x === 0 || Math.abs(x) === PI ? 0 : -1),
     label: 'Square wave',
     latex: 'f(x)=\\begin{cases}1 & 0<x<\\pi \\\\ -1 & -\\pi<x<0\\end{cases}',
   },
@@ -248,6 +250,8 @@ function build() {
   }
   if(N>5) lines.push(`… (${N} terms total)`);
   document.getElementById('coeff-box').innerHTML = lines.join('<br>');
+  document.getElementById('func-eq').innerHTML =
+    katex.renderToString(FUNCS[document.getElementById('func-sel').value].latex, {throwOnError:false, displayMode:false});
 }
 
 function onFuncChange() { build(); }

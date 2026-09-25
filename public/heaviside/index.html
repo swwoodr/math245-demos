@@ -29,8 +29,8 @@
           <option value="on_off">Force on, then off</option>
           <option value="pulse">Short pulse (on then off)</option>
           <option value="impulse">Impulse (Dirac δ approximation)</option>
-          <option value="resonance">Near-resonance burst</option>
-          <option value="ramp">Ramp input (integrator)</option>
+          <option value="resonance">Lightly damped: ringing at each switch</option>
+          <option value="ramp">Step into b = 0 system: ramp output</option>
         </select>
       </div>
 
@@ -175,7 +175,7 @@ function build(){
   const Fd=+document.getElementById('Fd-s').value;
   const tMax=+document.getElementById('T-s').value;
 
-  // Impulse approximated as tall narrow rectangle of width ε=0.01
+  // Impulse approximated as a tall, narrow rectangle of width ε and area Fd
   const eps=0.05;
 
   const g=t=>{
@@ -244,20 +244,26 @@ function build(){
     annotations:switchTimes.map(sw=>({x:sw.t,y:yLabelY,xref:'x',yref:'y',text:sw.label,font:{color:'rgba(240,165,0,0.6)',size:9},showarrow:false,xshift:5})),
   },{responsive:true,displayModeBar:false});
 
-  // Laplace representation
-  let gLaplace=`g(t) = `;
-  const parts=[];
-  if(Math.abs(F1)>0.001) parts.push(`${F1.toFixed(1)}\\,u(t-${t1})`);
-  if(useT2&&Math.abs(F1)>0.001) parts.push(`-${F1.toFixed(1)}\\,u(t-${t2})`);
-  if(useImpulse) parts.push(`${Fd.toFixed(1)}\\,\\delta(t-${t3})`);
-  gLaplace+=(parts.length?parts.join('+'): '0').replace('+-','-');
-
-  let gS=`G(s) = `;
-  const sparts=[];
-  if(Math.abs(F1)>0.001) sparts.push(`\\frac{${F1.toFixed(1)}}{s}e^{-${t1}s}`);
-  if(useT2&&Math.abs(F1)>0.001) sparts.push(`-\\frac{${F1.toFixed(1)}}{s}e^{-${t2}s}`);
-  if(useImpulse) sparts.push(`${Fd.toFixed(1)}\\,e^{-${t3}s}`);
-  gS+=(sparts.length?sparts.join('+'): '0').replace('+-','-');
+  // Laplace representation, with signs combined the way a textbook writes them
+  const n1 = x => String(parseFloat((+x).toFixed(2)));
+  const joinTerms = terms => {
+    if (!terms.length) return '0';
+    return terms.map(([c, body], i) => {
+      const mag = n1(Math.abs(c)), sign = c < 0 ? '-' : '+';
+      return (i === 0 ? (c < 0 ? '-' : '') : ` ${sign} `) + (mag === '1' ? '' : mag + '\\,') + body;
+    }).join('');
+  };
+  const u = tt => +tt === 0 ? 'u(t)' : `u(t-${n1(tt)})`;
+  const dlt = tt => +tt === 0 ? '\\delta(t)' : `\\delta(t-${n1(tt)})`;
+  const shiftS = (tt, base) => +tt === 0 ? base : `${base}\\,e^{-${n1(tt)}s}`;
+  const tT = [], sT = [];
+  if (Math.abs(F1) > 0.001) {
+    tT.push([F1, u(t1)]); sT.push([F1, shiftS(t1, '\\frac{1}{s}')]);
+    if (useT2) { tT.push([-F1, u(t2)]); sT.push([-F1, shiftS(t2, '\\frac{1}{s}')]); }
+  }
+  if (useImpulse && Math.abs(Fd) > 0.001) { tT.push([Fd, dlt(t3)]); sT.push([Fd, +t3 === 0 ? '1' : `e^{-${n1(t3)}s}`]); }
+  const gLaplace = `g(t) = ${joinTerms(tT)}`;
+  const gS = `G(s) = ${joinTerms(sT)}`;
 
   document.getElementById('laplace-text').innerHTML=
     `<b>Laplace form:</b><br>$${gLaplace}$<br>$${gS}$<br><span style="font-size:0.75rem;">Second Shifting Theorem: $\\mathcal{L}\\{u(t-a)f(t-a)\\} = e^{-as}F(s)$</span>`;

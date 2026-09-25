@@ -80,7 +80,7 @@
       </div>
 
       <!-- Angles + phase portrait side by side -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="two-plots">
         <div class="plot-box">
           <div id="angle-plot" style="height:220px;"></div>
         </div>
@@ -279,8 +279,8 @@ function drawChaos() {
   const {m1,m2,L1,L2,th1_0,th2_0,T,t,x2,y2}=_lastSolve;
   const ode=makeOde(m1,m2,L1,L2);
   const {Y:Yp}=rk4(ode,[th1_0,0,th2_0+DEG,0],T,600);
-  const x2p=Yp.map((y,i)=>L1*Math.sin(y[0])+L2*Math.sin(y[2]));
-  const y2p=Yp.map((y,i)=>-L1*Math.cos(y[0])-L2*Math.cos(y[2]));
+  const x2p=Yp.map(y=>L1*Math.sin(y[0])+L2*Math.sin(y[2]));
+  const y2p=Yp.map(y=>-L1*Math.cos(y[0])-L2*Math.cos(y[2]));
   const distRaw=t.map((_,i)=>Math.hypot(x2[i]-x2p[i],y2[i]-y2p[i]));
   // Replace zero/near-zero values with null so log scale doesn't break
   const dist=distRaw.map(d=>d>1e-10?d:null);

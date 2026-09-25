@@ -87,7 +87,7 @@
       <div class="ctrl-row">
         <label class="radio-option">
           <input type="checkbox" id="show-jac" onchange="schedule()" checked>
-          Show Jacobian at equilibria
+          Show Jacobian at each equilibrium
         </label>
       </div>
 
@@ -107,26 +107,32 @@
 let scheduledRaf = null;
 function sv(id, val, dp) { document.getElementById(id).textContent = dp !== '' ? (+val).toFixed(dp) : val; }
 function schedule() { if (scheduledRaf) cancelAnimationFrame(scheduledRaf); scheduledRaf = requestAnimationFrame(build); }
+function model() { return document.querySelector('input[name="model"]:checked').value; }
+
+const EQ_TEX = {
+  pp:   '\\dot x = ax - bxy,\\quad \\dot y = -cy + dxy',
+  comp: '\\dot x = x(a - bx - y),\\quad \\dot y = y(d - cx - y)',
+  coop: '\\dot x = x(a - bx + y),\\quad \\dot y = y(d + cx - y)',
+};
+const LABELS = {
+  pp:   { a:'Prey growth a', b:'Predation b', c:'Predator loss c', d:'Conversion d', x0:'x₀ (prey)', y0:'y₀ (predator)',
+          xName:'x (prey)', yName:'y (predator)' },
+  comp: { a:'Growth rate a (species 1)', b:'Self-limitation b', c:'Competition c (1 on 2)', d:'Growth rate d (species 2)',
+          x0:'x₀ (species 1)', y0:'y₀ (species 2)', xName:'x (species 1)', yName:'y (species 2)' },
+  coop: { a:'Growth rate a (species 1)', b:'Self-limitation b', c:'Cooperation c (1 helps 2)', d:'Growth rate d (species 2)',
+          x0:'x₀ (species 1)', y0:'y₀ (species 2)', xName:'x (species 1)', yName:'y (species 2)' },
+};
+
+function renderEq() {
+  document.getElementById('top-eq').innerHTML = katex.renderToString(EQ_TEX[model()], {throwOnError:false});
+}
 
 function onModelChange() {
-  const m = document.querySelector('input[name="model"]:checked').value;
-  const labels = {
-    pp: { a:'Prey growth a', b:'Predation b', c:'Predator loss c', d:'Conversion d', x0:'x₀ (prey)', y0:'y₀ (predator)' },
-    comp: { a:'Self-limit a₁', b:'Competition b', c:'Competition c', d:'Self-limit a₂', x0:'x₀', y0:'y₀' },
-    coop: { a:'Self-limit a₁', b:'Cooperation b', c:'Cooperation c', d:'Self-limit a₂', x0:'x₀', y0:'y₀' },
-  };
-  const L = labels[m];
-  ['a','b','c','d'].forEach(k => {
-    document.getElementById(`${k}-label`).childNodes[0].textContent = L[k] + ' ';
-  });
+  const L = LABELS[model()];
+  ['a','b','c','d'].forEach(k => { document.getElementById(`${k}-label`).childNodes[0].textContent = L[k] + ' '; });
   document.getElementById('x0-label').childNodes[0].textContent = L.x0 + ' ';
   document.getElementById('y0-label').childNodes[0].textContent = L.y0 + ' ';
-
-  const eq = { pp: '$\\dot x = ax - bxy,\\quad \\dot y = -cy + dxy$',
-               comp: '$\\dot x = x(a - bx - y),\\quad \\dot y = y(d - cx - y)$',
-               coop: '$\\dot x = x(a - bx + y),\\quad \\dot y = y(d + cx - y)$' };
-  document.getElementById('top-eq').innerHTML = eq[m];
-  if (window.renderMathInElement) renderMathInElement(document.getElementById('top-eq'));
+  renderEq();
   schedule();
 }
 
@@ -145,75 +151,82 @@ function solveSys(F, x0, y0, tMax) {
   let state=[x0,y0];
   for (let t=0; t<tMax; t+=h) {
     state = rk4Sys(F, t, state, h);
-    if (!isFinite(state[0])||!isFinite(state[1])||state[0]<0||state[1]<0) break;
+    if (!isFinite(state[0])||!isFinite(state[1])||state[0]<0||state[1]<0||state[0]>1e6||state[1]>1e6) break;
     xs.push(state[0]); ys.push(state[1]); ts.push(t+h);
   }
   return {xs,ys,ts};
 }
 
 function getModel() {
-  const m = document.querySelector('input[name="model"]:checked').value;
+  const m = model();
   const a=+document.getElementById('a-s').value, b=+document.getElementById('b-s').value;
   const c=+document.getElementById('c-s').value, d=+document.getElementById('d-s').value;
-
-  let F, eqs, jacs;
+  let F, eqs;
   if (m==='pp') {
     F = (t,[x,y]) => [a*x - b*x*y, -c*y + d*x*y];
     eqs = [[0,0],[c/d, a/b]];
-    jacs = [
-      [[a,0],[0,-c]],
-      [[0,-b*c/d],[d*a/b,0]],
-    ];
   } else if (m==='comp') {
-    // x' = x(a - bx - y), y' = y(d - cx - y)
     F = (t,[x,y]) => [x*(a-b*x-y), y*(d-c*x-y)];
-    eqs = [[0,0],[a/b,0],[0,d],[...solveLinear2x2(b,1,c,1,a,d)]];
-    eqs = eqs.filter(([x,y])=>x>=0&&y>=0&&isFinite(x)&&isFinite(y));
-    jacs = null;
+    // Coexistence: a − bx − y = 0 and d − cx − y = 0
+    eqs = [[0,0],[a/b,0],[0,d],[(a-d)/(b-c), (b*d-a*c)/(b-c)]];
   } else {
-    // x' = x(a - bx + y), y' = y(d + cx - y)
     F = (t,[x,y]) => [x*(a-b*x+y), y*(d+c*x-y)];
-    eqs = [[0,0]];
-    jacs = null;
+    // Coexistence: a − bx + y = 0 and d + cx − y = 0 (exists in the first quadrant only when b > c)
+    eqs = [[0,0],[a/b,0],[0,d],[(a+d)/(b-c), d + c*(a+d)/(b-c)]];
   }
-  return {F, eqs, jacs, a, b, c, d, m};
+  eqs = eqs.filter(([x,y]) => isFinite(x) && isFinite(y) && x >= -1e-12 && y >= -1e-12)
+           .map(([x,y]) => [Math.max(0,x), Math.max(0,y)]);
+  eqs = eqs.filter((p, i) => eqs.findIndex(q => Math.hypot(q[0]-p[0], q[1]-p[1]) < 1e-9) === i);
+  return {F, eqs, a, b, c, d, m};
 }
 
-function solveLinear2x2(a11,a12,a21,a22,b1,b2) {
-  const det = a11*a22 - a12*a21;
-  if (Math.abs(det)<1e-12) return [NaN,NaN];
-  return [(b1*a22-b2*a12)/det, (a11*b2-a21*b1)/det];
+function jacobianAt(F, x, y) {
+  const h = 1e-6, fx1 = F(0,[x+h,y]), fx0 = F(0,[x-h,y]), fy1 = F(0,[x,y+h]), fy0 = F(0,[x,y-h]);
+  return [[(fx1[0]-fx0[0])/(2*h), (fy1[0]-fy0[0])/(2*h)], [(fx1[1]-fx0[1])/(2*h), (fy1[1]-fy0[1])/(2*h)]];
+}
+function classifyJ(J, m) {
+  const tr = J[0][0]+J[1][1], det = J[0][0]*J[1][1]-J[0][1]*J[1][0], disc = tr*tr-4*det, tol = 1e-7;
+  if (det < -tol) return {name:'Saddle point (unstable)', color:'#fa8431'};
+  if (Math.abs(det) <= tol) return {name:'Non-hyperbolic (zero eigenvalue)', color:'#fbbf24'};
+  if (disc < 0) {
+    if (Math.abs(tr) <= tol) return {name: m === 'pp' ? 'Center — orbits close up around it' : 'Center (linearization only)', color:'#fbbf24'};
+    return tr < 0 ? {name:'Spiral sink (stable)', color:'#5de4c7'} : {name:'Spiral source (unstable)', color:'#ff6b8a'};
+  }
+  return tr < 0 ? {name:'Nodal sink (stable)', color:'#5de4c7'} : {name:'Nodal source (unstable)', color:'#ff6b8a'};
+}
+function eigText(J) {
+  const tr = J[0][0]+J[1][1], det = J[0][0]*J[1][1]-J[0][1]*J[1][0], disc = tr*tr-4*det;
+  const f = v => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(3);
+  if (disc >= 0) { const s = Math.sqrt(disc); return `λ = ${f((tr+s)/2)}, ${f((tr-s)/2)}`; }
+  return `λ = ${f(tr/2)} ± ${f(Math.sqrt(-disc)/2)}i`;
 }
 
 function build() {
-  const {F, eqs, jacs, a, b, c, d, m} = getModel();
+  const {F, eqs, a, b, c, d, m} = getModel();
+  const L = LABELS[m];
   const x0=+document.getElementById('x0-s').value, y0=+document.getElementById('y0-s').value;
   const tMax=+document.getElementById('T-s').value;
   const showMulti = document.getElementById('show-multi').checked;
   const showJac = document.getElementById('show-jac').checked;
 
   const {xs,ys,ts} = solveSys(F, x0, y0, tMax);
-  const xMax = Math.max(...xs)*1.2||20, yMax = Math.max(...ys)*1.2||20;
+  const xMax = Math.max(...xs, ...eqs.map(e => e[0]*1.1))*1.2||20, yMax = Math.max(...ys, ...eqs.map(e => e[1]*1.1))*1.2||20;
+  const info = eqs.map(([x,y]) => { const J = jacobianAt(F, x, y); return {x, y, J, C: classifyJ(J, m)}; });
 
   // ── Phase portrait ──────────────────────────────────────────────────────────
   const phTraces = [];
 
-  // Nullclines
-  if (m==='pp') {
-    // x-nullcline: x=0 and y=a/b
-    phTraces.push({ x:[0,0], y:[0,yMax], mode:'lines', line:{color:'rgba(77,159,255,0.4)',width:1.5,dash:'dot'}, name:'x-nullcline', hoverinfo:'skip' });
-    phTraces.push({ x:[0,xMax], y:[a/b,a/b], mode:'lines', line:{color:'rgba(77,159,255,0.4)',width:1.5,dash:'dot'}, showlegend:false, hoverinfo:'skip' });
-    // y-nullcline: y=0 and x=c/d
-    phTraces.push({ x:[0,xMax], y:[0,0], mode:'lines', line:{color:'rgba(240,165,0,0.4)',width:1.5,dash:'dash'}, name:'y-nullcline', hoverinfo:'skip' });
-    phTraces.push({ x:[c/d,c/d], y:[0,yMax], mode:'lines', line:{color:'rgba(240,165,0,0.4)',width:1.5,dash:'dash'}, showlegend:false, hoverinfo:'skip' });
-  }
+  // Nullclines (straight lines in all three models)
+  const xNull = m==='pp' ? {type:'h', v:a/b} : m==='comp' ? {line:x => a - b*x} : {line:x => b*x - a};
+  const yNull = m==='pp' ? {type:'v', v:c/d} : m==='comp' ? {line:x => d - c*x} : {line:x => d + c*x};
+  const nullTrace = (N, color, dash, name) => N.type === 'h' ? {x:[0,xMax], y:[N.v,N.v]}
+                                          : N.type === 'v' ? {x:[N.v,N.v], y:[0,yMax]}
+                                          : {x:[0,xMax], y:[N.line(0), N.line(xMax)]};
+  phTraces.push({...nullTrace(xNull), mode:'lines', line:{color:'rgba(77,159,255,0.45)',width:1.5,dash:'dot'}, name:'x-nullcline (x′ = 0)', hoverinfo:'skip'});
+  phTraces.push({...nullTrace(yNull), mode:'lines', line:{color:'rgba(240,165,0,0.45)',width:1.5,dash:'dash'}, name:'y-nullcline (y′ = 0)', hoverinfo:'skip'});
 
-  // Multiple ICs
   if (showMulti) {
-    const multiICs = [
-      [x0*0.4, y0*0.4],[x0*0.7,y0*0.7],[x0*1.4,y0*1.4],[x0*2,y0],
-      [x0, y0*2],[x0*0.5,y0*2],[x0*2,y0*0.5],
-    ];
+    const multiICs = [[x0*0.4, y0*0.4],[x0*0.7,y0*0.7],[x0*1.4,y0*1.4],[x0*2,y0],[x0, y0*2],[x0*0.5,y0*2],[x0*2,y0*0.5]];
     for (const [mx,my] of multiICs) {
       if (mx<=0||my<=0) continue;
       const {xs:mxs,ys:mys} = solveSys(F, mx, my, tMax);
@@ -221,73 +234,54 @@ function build() {
     }
   }
 
-  // Main trajectory
   phTraces.push({ x:xs, y:ys, mode:'lines', type:'scatter', line:{color:'#4d9fff',width:2.2}, name:'Trajectory' });
   phTraces.push({ x:[x0], y:[y0], mode:'markers', type:'scatter', marker:{color:'#f0a500',size:9,symbol:'circle'}, name:`(${x0},${y0})`, showlegend:false });
 
-  // Equilibria
-  for (const eq of eqs) {
-    phTraces.push({ x:[eq[0]], y:[eq[1]], mode:'markers', type:'scatter',
-      marker:{color:'#5de4c7',size:10,symbol:'circle',line:{color:'white',width:1.5}},
-      name:`Eq (${eq[0].toFixed(2)},${eq[1].toFixed(2)})`,
-      hovertemplate:`(${eq[0].toFixed(3)}, ${eq[1].toFixed(3)})<extra>Equilibrium</extra>` });
-  }
+  info.forEach(q => phTraces.push({ x:[q.x], y:[q.y], mode:'markers', type:'scatter',
+    marker:{color:q.C.color, size:11, symbol: q.C.name.startsWith('Saddle') ? 'x' : 'circle', line:{color:'white',width:1.5}},
+    name:`(${q.x.toFixed(2)}, ${q.y.toFixed(2)})`,
+    hovertemplate:`(${q.x.toFixed(3)}, ${q.y.toFixed(3)})<br>${q.C.name}<extra></extra>` }));
 
-  const phLayout = {
+  Plotly.react('phase-plot', phTraces, {
     paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
     font:{color:'#D2E0EE',size:11},
     margin:{t:10,r:20,b:45,l:55},
-    xaxis:{range:[0,xMax],title:'x (prey / species 1)',gridcolor:'rgba(255,255,255,0.06)',zerolinecolor:'rgba(255,255,255,0.18)'},
-    yaxis:{range:[0,yMax],title:'y (predator / species 2)',gridcolor:'rgba(255,255,255,0.06)',zerolinecolor:'rgba(255,255,255,0.18)'},
+    xaxis:{range:[0,xMax],title:L.xName,gridcolor:'rgba(255,255,255,0.06)',zerolinecolor:'rgba(255,255,255,0.18)'},
+    yaxis:{range:[0,yMax],title:L.yName,gridcolor:'rgba(255,255,255,0.06)',zerolinecolor:'rgba(255,255,255,0.18)'},
     showlegend:true, legend:{x:1.01,y:1,font:{size:9}},
-  };
-  Plotly.react('phase-plot', phTraces, phLayout, {responsive:true,displayModeBar:false});
+  }, {responsive:true,displayModeBar:false});
 
   // ── Time series ─────────────────────────────────────────────────────────────
-  const tsTraces = [
-    { x:ts, y:xs, mode:'lines', line:{color:'#4d9fff',width:2}, name:'x (prey)' },
-    { x:ts, y:ys, mode:'lines', line:{color:'#f0a500',width:2}, name:'y (predator)' },
-  ];
-  const tsLayout = {
+  Plotly.react('time-plot', [
+    { x:ts, y:xs, mode:'lines', line:{color:'#4d9fff',width:2}, name:L.xName },
+    { x:ts, y:ys, mode:'lines', line:{color:'#f0a500',width:2}, name:L.yName },
+  ], {
     paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
     font:{color:'#D2E0EE',size:11},
     margin:{t:10,r:20,b:40,l:55},
     xaxis:{range:[0,tMax],title:'t',gridcolor:'rgba(255,255,255,0.06)'},
     yaxis:{title:'Population',gridcolor:'rgba(255,255,255,0.06)'},
     showlegend:true, legend:{x:1.01,y:1,font:{size:9}},
-  };
-  Plotly.react('time-plot', tsTraces, tsLayout, {responsive:true,displayModeBar:false});
+  }, {responsive:true,displayModeBar:false});
 
-  // ── Jacobian display ────────────────────────────────────────────────────────
-  if (showJac && jacs && m==='pp') {
-    const eqLabels = ['(0, 0)', `(c/d, a/b) = (${(c/d).toFixed(2)}, ${(a/b).toFixed(2)})`];
-    const html = eqs.map((eq, i) => {
-      const J = jacs[i];
-      const tr = J[0][0]+J[1][1], det = J[0][0]*J[1][1]-J[0][1]*J[1][0];
-      const disc = tr*tr-4*det;
-      let cls = '';
-      if (det < 0) cls = 'Saddle';
-      else if (disc < 0) cls = tr < 0 ? 'Stable spiral/center' : tr > 0 ? 'Unstable spiral' : 'Center';
-      else cls = tr < 0 ? 'Stable node' : tr > 0 ? 'Unstable node' : 'Non-hyperbolic';
-      return `<b>${eqLabels[i]}</b><br>τ = ${tr.toFixed(3)}, Δ = ${det.toFixed(3)}<br><em>${cls}</em>`;
-    }).join('<hr style="border-color:rgba(255,255,255,0.1);margin:0.5rem 0;">');
-    document.getElementById('jac-display').innerHTML = '<div style="font-size:0.8rem;line-height:1.6;color:var(--muted);">' + html + '</div>';
+  // ── Jacobian at each equilibrium ────────────────────────────────────────────
+  const jd = document.getElementById('jac-display');
+  if (showJac) {
+    const f = v => (Math.abs(v) < 5e-7 ? 0 : v).toFixed(3);
+    let html = info.map(q =>
+      `<b>(${q.x.toFixed(2)}, ${q.y.toFixed(2)})</b><br>J = [${f(q.J[0][0])}, ${f(q.J[0][1])}; ${f(q.J[1][0])}, ${f(q.J[1][1])}]<br>` +
+      `${eigText(q.J)}<br><em style="color:${q.C.color}">${q.C.name}</em>`
+    ).join('<hr style="border-color:rgba(255,255,255,0.1);margin:0.5rem 0;">');
+    if (m === 'coop' && b <= c) html += '<hr style="border-color:rgba(255,255,255,0.1);margin:0.5rem 0;">No coexistence equilibrium: with c ≥ b the cooperation outweighs self-limitation, so both populations grow without bound.';
+    if (m === 'comp' && info.length < 4) html += '<hr style="border-color:rgba(255,255,255,0.1);margin:0.5rem 0;">No coexistence equilibrium in the first quadrant for these parameters — one species excludes the other.';
+    jd.style.display = '';
+    jd.innerHTML = '<div style="font-size:0.8rem;line-height:1.6;color:var(--muted);">' + html + '</div>';
   } else {
-    document.getElementById('jac-display').innerHTML = '';
+    jd.style.display = 'none';
   }
-
-  // Update equation
-  const eq = { pp: '$\\dot x = ax - bxy,\\quad \\dot y = -cy + dxy$',
-               comp: '$\\dot x = x(a - bx - y),\\quad \\dot y = y(d - cx - y)$',
-               coop: '$\\dot x = x(a - bx + y),\\quad \\dot y = y(d + cx - y)$' };
-  document.getElementById('top-eq').innerHTML = eq[m];
-  if (window.renderMathInElement) renderMathInElement(document.getElementById('top-eq'));
 }
 
-window.addEventListener('load', () => {
-  document.getElementById('top-eq').innerHTML = '$\\dot x = ax - bxy,\\quad \\dot y = -cy + dxy$';
-  build();
-});
+window.addEventListener('load', () => { renderEq(); build(); });
 </script>
 </body>
 </html>
