@@ -302,7 +302,7 @@
     <div class="nav-spacer"></div>
     <div class="nav-chip">
       <div class="nav-chip-dot"></div>
-      21 Apps
+      <span id="app-count">21</span> Apps
     </div>
   </nav>
 
@@ -467,7 +467,7 @@
       </div>
     </section>
 
-    <!-- ── Block 4 — Laplace Transforms ────────────────────────────── -->
+    <!-- ── Laplace Transforms ──────────────────────────────────────── -->
     <section class="app-grid-section">
       <div class="section-label">Laplace Transforms</div>
       <div class="app-grid">
@@ -506,6 +506,10 @@
   </footer>
 
 </div><!-- /page-wrap -->
+
+<script>
+document.getElementById('app-count').textContent = document.querySelectorAll('.app-card').length;
+</script>
 
 <!-- ── Particle animation (gold + blue, matching ECE store) ────────────── -->
 <script>
