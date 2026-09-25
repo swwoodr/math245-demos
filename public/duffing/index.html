@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Duffing Oscillator</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .two-col { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1rem; }
+    @media (max-width: 900px) { .two-col { grid-template-columns:1fr; } }
+    #scenario-desc { font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; }
+    #status { margin-top:0.75rem; padding:0.6rem 0.75rem; border-radius:8px; font-size:0.82rem; line-height:1.5;
+              background:rgba(255,255,255,0.04); color:var(--muted); }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Duffing Oscillator</h1>
+  <p class="demo-eq">$x'' + \delta\,x' + \alpha\,x + \beta\,x^3 = 0 \qquad \text{restoring force } F(x) = -\alpha x - \beta x^3$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Scenario</div>
+      <div class="ctrl-row">
+        <select id="preset-sel" onchange="loadPreset()">
+          <option value="hard">Hard spring (β &gt; 0)</option>
+          <option value="soft">Soft spring (β &lt; 0)</option>
+          <option value="escape">Soft spring: escape</option>
+          <option value="damped">Damped hard spring</option>
+          <option value="linear">Linear spring (β = 0)</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div id="scenario-desc"></div>
+      </div>
+
+      <div class="ctrl-section">Spring</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Linear stiffness α <span class="ctrl-val" id="al-v">1.00</span></div>
+        <input type="range" id="al-s" min="0.25" max="4" step="0.05" value="1" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Cubic stiffness β <span class="ctrl-val" id="be-v">0.50</span></div>
+        <input type="range" id="be-s" min="-1" max="1" step="0.02" value="0.5" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Damping δ <span class="ctrl-val" id="de-v">0.00</span></div>
+        <input type="range" id="de-s" min="0" max="0.5" step="0.01" value="0" oninput="onParam()">
+      </div>
+
+      <div class="ctrl-section">Initial Condition</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">x(0) <span class="ctrl-val" id="x0-v">1.50</span></div>
+        <input type="range" id="x0-s" min="-3" max="3" step="0.05" value="1.5" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">x′(0) <span class="ctrl-val" id="v0-v">0.00</span></div>
+        <input type="range" id="v0-s" min="-3" max="3" step="0.05" value="0" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">30</span></div>
+        <input type="range" id="T-s" min="5" max="60" step="1" value="30" oninput="onParam()">
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row">
+        <label class="radio-option"><input type="checkbox" id="show-lin" checked onchange="build()"> Compare with linear spring (β = 0)</label>
+      </div>
+
+      <div id="status"></div>
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box"><div id="pp-plot" style="height:400px;"></div></div>
+
+      <div class="two-col">
+        <div class="plot-box"><div id="ts-plot" style="height:280px;"></div></div>
+        <div class="plot-box"><div id="per-plot" style="height:280px;"></div></div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Spring type</div><div class="metric-value plain" id="m-type" style="font-size:1rem;">—</div></div>
+        <div class="metric"><div class="metric-label">Linear period T₀ = 2π/√α</div><div class="metric-value" id="m-T0">—</div></div>
+        <div class="metric"><div class="metric-label">Period at this amplitude (δ = 0)</div><div class="metric-value" id="m-T">—</div></div>
+        <div class="metric"><div class="metric-label">Change from T₀</div><div class="metric-value plain" id="m-dT">—</div></div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 Hard springs, soft springs, and amplitude-dependent frequency</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            A linear spring (Hooke's law, $\beta = 0$) has the same period $T_0 = 2\pi/\sqrt{\alpha}$ at every amplitude.
+            Real springs stiffen or weaken when stretched far, which the cubic term models:
+          </p>
+          <p>
+            <strong>Hard spring ($\beta > 0$):</strong> the restoring force grows faster than linearly, so large
+            oscillations are <em>faster</em> — the period shrinks as amplitude grows.
+          </p>
+          <p>
+            <strong>Soft spring ($\beta < 0$):</strong> the force weakens at large $x$, so large oscillations are
+            <em>slower</em>. Beyond $x_s = \sqrt{-\alpha/\beta}$ the force points outward: $(\pm x_s, 0)$ are saddle
+            points, and a mass with too much energy escapes. The simple pendulum is a soft spring, since
+            $\sin\theta \approx \theta - \theta^3/6$.
+          </p>
+          <p>
+            With no damping, energy is conserved:
+            $E = \tfrac12 (x')^2 + \tfrac12\alpha x^2 + \tfrac14\beta x^4$. The faint curves in the phase plane are
+            level sets of $E$, and the period at amplitude $A$ is
+          </p>
+          <p>$$T(A) = 4\int_0^{\pi/2}\frac{d\varphi}{\sqrt{\alpha + \tfrac12\beta A^2\,(1 + \sin^2\varphi)}} \;\approx\; T_0\left(1 - \frac{3\beta A^2}{8\alpha}\right).$$</p>
+          <p>
+            Like the pendulum, the Duffing equation has no elementary closed-form solution, so it is solved numerically
+            (here with RK4; in MATLAB, write it as a first-order system and use <code>ode45</code>).
+            Compare the <a href="/simple-pendulum/" style="color:var(--blue-bright);">Simple Pendulum</a> and
+            <a href="/pendulum-phase/" style="color:var(--blue-bright);">Pendulum Phase Plane</a> demos.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:52, r:16, t:32, b:44}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+const LEGEND = {x:0.99, xanchor:'right', y:0.99, bgcolor:'rgba(12,26,48,0.8)', bordercolor:'#1A304D', borderwidth:1, font:{size:11}};
+const GOLD = '#f0a500', BLUE = '#4d9fff';
+
+const PRESETS = {
+  hard:   {al:1, be:0.5,  de:0,    x0:1.5, v0:0, T:30, desc:'β > 0: the spring stiffens when stretched. Compare with the linear spring — the Duffing oscillation runs ahead.'},
+  soft:   {al:1, be:-0.2, de:0,    x0:1.5, v0:0, T:30, desc:'β < 0: the spring weakens when stretched, so the oscillation lags the linear one. Note the saddle points at x = ±√5.'},
+  escape: {al:1, be:-0.2, de:0,    x0:2.3, v0:0, T:30, desc:'Released just beyond the saddle at x = √5 ≈ 2.24, the mass has too much energy to stay in the well and runs away.'},
+  damped: {al:1, be:1,    de:0.15, x0:2,   v0:0, T:40, desc:'Damping drains energy, so the amplitude shrinks and the oscillation gradually slows toward the linear period.'},
+  linear: {al:1, be:0,    de:0,    x0:1.5, v0:0, T:30, desc:'β = 0 is Hooke\'s law: the period is the same at every amplitude.'},
+  custom: {al:null, desc:'Set the spring and initial condition with the sliders.'},
+};
+
+function g(id) { return parseFloat(document.getElementById(id).value); }
+function setVal(id, v) { document.getElementById(id).value = v; }
+function V(x, al, be) { return 0.5*al*x*x + 0.25*be*x**4; }
+
+function simulate(al, be, de, x0, v0, T) {
+  const h = 0.01, n = Math.round(T/h), ts = [0], xs = [x0], vs = [v0];
+  const f = (x, v) => [v, -de*v - al*x - be*x*x*x];
+  let x = x0, v = v0, escaped = false;
+  for (let i = 1; i <= n; i++) {
+    const k1 = f(x, v), k2 = f(x + h/2*k1[0], v + h/2*k1[1]);
+    const k3 = f(x + h/2*k2[0], v + h/2*k2[1]), k4 = f(x + h*k3[0], v + h*k3[1]);
+    x += h/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]); v += h/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+    ts.push(i*h); xs.push(x); vs.push(v);
+    if (Math.abs(x) > 12) { escaped = true; break; }
+  }
+  return {ts, xs, vs, escaped};
+}
+
+// Amplitude reached from energy E (undamped); null if the mass escapes a soft-spring well
+function amplitude(E, al, be) {
+  if (Math.abs(be) < 1e-12) return Math.sqrt(2*E/al);
+  const disc = al*al + 4*be*E;
+  if (disc < 0) return null;
+  const A2 = (-al + Math.sqrt(disc))/be;
+  return A2 >= 0 ? Math.sqrt(A2) : null;
+}
+function period(A, al, be) {
+  const n = 400; let s = 0;
+  for (let i = 0; i <= n; i++) {
+    const ph = (Math.PI/2)*i/n, w = (i === 0 || i === n) ? 1 : (i % 2 ? 4 : 2);
+    const den = al + 0.5*be*A*A*(1 + Math.sin(ph)**2);
+    if (den <= 0) return Infinity;
+    s += w/Math.sqrt(den);
+  }
+  return 4*s*(Math.PI/2)/(3*n);
+}
+
+function loadPreset() {
+  const P = PRESETS[document.getElementById('preset-sel').value];
+  document.getElementById('scenario-desc').textContent = P.desc;
+  if (P.al !== null) {
+    setVal('al-s', P.al); setVal('be-s', P.be); setVal('de-s', P.de);
+    setVal('x0-s', P.x0); setVal('v0-s', P.v0); setVal('T-s', P.T);
+  }
+  build();
+}
+function onParam() {
+  document.getElementById('preset-sel').value = 'custom';
+  document.getElementById('scenario-desc').textContent = PRESETS.custom.desc;
+  schedule();
+}
+
+function build() {
+  const al = g('al-s'), be = g('be-s'), de = g('de-s'), x0 = g('x0-s'), v0 = g('v0-s'), T = g('T-s');
+  const showLin = document.getElementById('show-lin').checked;
+  [['al', al], ['be', be], ['de', de], ['x0', x0], ['v0', v0]].forEach(([k, v]) =>
+    document.getElementById(k + '-v').textContent = v.toFixed(2));
+  document.getElementById('T-v').textContent = T.toFixed(0);
+
+  const run = simulate(al, be, de, x0, v0, T);
+  const lin = simulate(al, 0, de, x0, v0, T);
+  const xs_ = be < 0 ? Math.sqrt(-al/be) : null;
+
+  // ── Phase plane ──
+  const R = Math.min(Math.max(3, 1.15*Math.max(Math.abs(x0), ...(xs_ ? [xs_*1.25] : []))), 4.5);
+  const vMaxE = Math.sqrt(2*Math.max(V(R, al, be), V(Math.abs(x0), al, be) + 0.5*v0*v0, 0.5)) ;
+  const VR = Math.min(Math.max(3, 1.1*vMaxE), 8);
+  const nG = 120, gx = [], gv = [], Z = [];
+  for (let i = 0; i < nG; i++) gx.push(-R + 2*R*i/(nG-1));
+  for (let j = 0; j < nG; j++) gv.push(-VR + 2*VR*j/(nG-1));
+  for (const v of gv) Z.push(gx.map(x => 0.5*v*v + V(x, al, be)));
+  const E0 = 0.5*v0*v0 + V(x0, al, be);
+  const eMax = Math.max(E0*2, V(R, al, be) > 0 ? V(R, al, be) : 1);
+  const pTr = [{type:'contour', x:gx, y:gv, z:Z, showscale:false, hoverinfo:'skip', showlegend:false,
+                contours:{coloring:'lines', start:eMax/14, end:eMax, size:eMax/14},
+                colorscale:[[0, 'rgba(135,150,196,0.35)'], [1, 'rgba(135,150,196,0.35)']], line:{width:1}}];
+  if (xs_) {
+    const Es = V(xs_, al, be);
+    pTr.push({type:'contour', x:gx, y:gv, z:Z, showscale:false, hoverinfo:'skip', name:'Separatrix', showlegend:true,
+              contours:{coloring:'lines', start:Es, end:Es, size:1}, colorscale:[[0, '#fa8431'], [1, '#fa8431']], line:{width:2, dash:'dash'}});
+    pTr.push({x:[-xs_, xs_], y:[0, 0], mode:'markers', name:'Saddles', marker:{color:'#fa8431', size:11, symbol:'x'}, hoverinfo:'skip'});
+  }
+  if (showLin) pTr.push({x:lin.xs, y:lin.vs, mode:'lines', name:'Linear spring', line:{color:BLUE, width:1.6, dash:'dash'}});
+  pTr.push({x:run.xs, y:run.vs, mode:'lines', name:'Duffing', line:{color:GOLD, width:2.4}});
+  pTr.push({x:[x0], y:[v0], mode:'markers', name:'Start', marker:{color:GOLD, size:10, line:{color:'white', width:1.5}}, showlegend:false});
+  pTr.push({x:[0], y:[0], mode:'markers', showlegend:false, hoverinfo:'skip', marker:{color:'#34d399', size:9}});
+  Plotly.react('pp-plot', pTr, {
+    ...BASE, showlegend:true, hovermode:false, legend:LEGEND,
+    title:{text:'Phase plane (x, x′) with energy level curves', font:{size:13}},
+    xaxis:{title:'x', range:[-R, R], ...AX}, yaxis:{title:'x′', range:[-VR, VR], ...AX},
+  }, CFG);
+
+  // ── x(t) ──
+  const tsTr = [];
+  if (showLin) tsTr.push({x:lin.ts, y:lin.xs, mode:'lines', name:'Linear spring', line:{color:BLUE, width:1.6, dash:'dash'}});
+  tsTr.push({x:run.ts, y:run.xs, mode:'lines', name:'Duffing', line:{color:GOLD, width:2.2}});
+  Plotly.react('ts-plot', tsTr, {
+    ...BASE, showlegend:true, legend:LEGEND,
+    title:{text:'x(t)', font:{size:13}},
+    xaxis:{title:'t', range:[0, T], ...AX},
+    yaxis:{title:'x', range: run.escaped ? [-6, 6] : undefined, ...AX},
+  }, CFG);
+
+  // ── Period vs amplitude ──
+  const T0 = 2*Math.PI/Math.sqrt(al);
+  const Amax = xs_ ? xs_*0.995 : 3;
+  const As = [], ratio = [];
+  for (let i = 1; i <= 150; i++) { const A = Amax*i/150; As.push(A); ratio.push(period(A, al, be)/T0); }
+  // Starting outside the barrier (|x| ≥ x_s on a soft spring) means escape regardless of energy
+  const A0 = (xs_ && Math.abs(x0) >= xs_) ? null : amplitude(E0, al, be);
+  const Tnow = A0 === null ? Infinity : period(A0, al, be);
+  const perTr = [
+    {x:[0, Amax], y:[1, 1], mode:'lines', name:'Linear: T = T₀', line:{color:BLUE, width:1.5, dash:'dash'}},
+    {x:As, y:ratio, mode:'lines', name:'Duffing', line:{color:GOLD, width:2.4}},
+  ];
+  if (A0 !== null && isFinite(Tnow)) perTr.push({x:[A0], y:[Tnow/T0], mode:'markers', name:'This amplitude',
+    marker:{color:GOLD, size:11, symbol:'diamond', line:{color:'white', width:1.5}}});
+  const rMax = Math.max(...ratio.filter(isFinite)), rMin = Math.min(...ratio.filter(isFinite));
+  Plotly.react('per-plot', perTr, {
+    ...BASE, showlegend:true, legend:LEGEND,
+    title:{text:'Period vs. amplitude (undamped)', font:{size:13}},
+    xaxis:{title:'Amplitude A', range:[0, Amax], ...AX},
+    yaxis:{title:'T / T₀', range:[Math.min(0.9, rMin - 0.05), Math.min(Math.max(1.1, rMax + 0.05), 3)], ...AX},
+  }, CFG);
+
+  // ── Metrics and status ──
+  const typeEl = document.getElementById('m-type');
+  typeEl.textContent = be > 1e-9 ? 'Hard (β > 0)' : be < -1e-9 ? 'Soft (β < 0)' : 'Linear (β = 0)';
+  document.getElementById('m-T0').textContent = T0.toFixed(3);
+  const status = document.getElementById('status');
+  if (A0 === null || !isFinite(Tnow)) {
+    document.getElementById('m-T').textContent = '∞';
+    document.getElementById('m-dT').textContent = 'escapes';
+  } else {
+    document.getElementById('m-T').textContent = Tnow.toFixed(3);
+    const pct = (Tnow/T0 - 1)*100;
+    document.getElementById('m-dT').textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+  }
+  const parts = [`Energy E = ${E0.toFixed(3)}.`];
+  if (A0 !== null && isFinite(Tnow)) parts.push(`Undamped amplitude A = ${A0.toFixed(3)}.`);
+  if (xs_) parts.push(`Saddles at x = ±${xs_.toFixed(3)}, escape energy ${V(xs_, al, be).toFixed(3)}.`);
+  if (run.escaped) parts.push('<strong style="color:#fa8431;">The mass escaped the well.</strong>');
+  if (de > 0) parts.push('With damping, energy decreases, so the amplitude (and, for a nonlinear spring, the period) keeps changing.');
+  status.innerHTML = parts.join(' ');
+}
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 60); }
+window.addEventListener('load', loadPreset);
+</script>
+</body>
+</html>

@@ -10,12 +10,22 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
           onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .gauge { margin-top:1rem; padding:0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; text-align:center; }
+    .gauge .big { font-size:2rem; font-weight:700; font-family:var(--font-heading); }
+    .gauge .sub { font-size:0.78rem; color:var(--muted); line-height:1.6; margin-top:0.35rem; }
+    .note { font-size:0.78rem; color:var(--muted); margin:0.2rem 0 0.5rem; }
+    .info-box { padding:0.9rem 1.1rem; line-height:1.8; font-size:0.9rem; overflow-x:auto; }
+    .info-box h3 { font-size:0.72rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); font-weight:600; margin:0.5rem 0 0.1rem; }
+    .info-box h3:first-child { margin-top:0.1rem; }
+    .info-box .verdict { color:var(--muted); font-size:0.86rem; line-height:1.55; }
+  </style>
 </head>
 <body>
 <div class="demo-wrap">
   <a class="back-link" href="/">← All Demos</a>
   <h1>SIR Epidemic Model</h1>
-  <p class="demo-eq">$\dot S = -\tfrac{\beta SI}{N},\quad \dot I = \tfrac{\beta SI}{N} - \gamma I,\quad \dot R = \gamma I$</p>
+  <p class="demo-eq" id="top-eq">$\dot S = -\tfrac{\beta SI}{N},\quad \dot I = \tfrac{\beta SI}{N} - (\gamma + q) I,\quad \dot R = (\gamma + q) I$</p>
 
   <div class="demo-layout">
 
@@ -25,12 +35,12 @@
       <div class="ctrl-section">Model</div>
       <div class="radio-group">
         <label class="radio-option">
-          <input type="radio" name="model" value="sir" checked onchange="schedule()">
+          <input type="radio" name="model" value="sir" checked onchange="onModel()">
           SIR — no reinfection
         </label>
         <label class="radio-option">
-          <input type="radio" name="model" value="sirs" onchange="schedule()">
-          SIRS — reinfection at rate ω
+          <input type="radio" name="model" value="sirs" onchange="onModel()">
+          SIRS — immunity wanes at rate ω
         </label>
       </div>
 
@@ -46,12 +56,12 @@
                oninput="sv('gamma-v',this.value,2); schedule()">
       </div>
       <div class="ctrl-row" id="omega-row" style="display:none;">
-        <div class="ctrl-label">Reinfection ω <span class="ctrl-val" id="omega-v">0.01</span></div>
+        <div class="ctrl-label">Waning immunity ω <span class="ctrl-val" id="omega-v">0.010</span></div>
         <input type="range" id="omega-s" min="0.001" max="0.2" step="0.001" value="0.01"
                oninput="sv('omega-v',this.value,3); schedule()">
       </div>
 
-      <div class="ctrl-section">Initial Conditions</div>
+      <div class="ctrl-section">Population</div>
       <div class="ctrl-row">
         <div class="ctrl-label">Population N <span class="ctrl-val" id="N-v">1000</span></div>
         <input type="range" id="N-s" min="100" max="10000" step="100" value="1000"
@@ -63,142 +73,253 @@
                oninput="sv('I0-v',this.value,0); schedule()">
       </div>
 
-      <div class="ctrl-section">Intervention</div>
+      <div class="ctrl-section">Interventions</div>
       <div class="ctrl-row">
-        <div class="ctrl-label">Vaccination v% <span class="ctrl-val" id="vax-v">0</span>%</div>
+        <div class="ctrl-label">Vaccination <span class="ctrl-val" id="vax-v">0</span>%</div>
         <input type="range" id="vax-s" min="0" max="95" step="1" value="0"
                oninput="sv('vax-v',this.value,0); schedule()">
       </div>
-      <p style="font-size:0.78rem;color:var(--muted);margin:0.2rem 0 0.5rem;">Vaccination moves a fraction of S₀ → R₀.</p>
+      <p class="note">Vaccination moves a fraction of the population from S straight to R before the outbreak.</p>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Quarantine rate q <span class="ctrl-val" id="q-v">0.00</span></div>
+        <input type="range" id="q-s" min="0" max="0.5" step="0.01" value="0"
+               oninput="sv('q-v',this.value,2); schedule()">
+      </div>
+      <p class="note">Quarantine isolates infectious people at rate q, so they stop transmitting (counted in R).</p>
 
       <div class="ctrl-row">
-        <div class="ctrl-label">Time span T <span class="ctrl-val" id="T-v">200</span></div>
+        <div class="ctrl-label">Time span T (days) <span class="ctrl-val" id="T-v">200</span></div>
         <input type="range" id="T-s" min="30" max="500" step="10" value="200"
                oninput="sv('T-v',this.value,0); schedule()">
       </div>
 
-      <!-- R₀ gauge -->
-      <div style="margin-top:1rem; padding:0.75rem; background:rgba(255,255,255,0.04); border-radius:8px; text-align:center;">
-        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.25rem;">Effective R₀ at t=0</div>
-        <div id="r0-display" style="font-size:2rem;font-weight:700;font-family:var(--font-heading);"></div>
-        <div id="r0-label" style="font-size:0.78rem;margin-top:0.25rem;"></div>
-        <div style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;">$\mathcal{R}_0 = \beta S_0 / \gamma$</div>
-      </div>
-
-      <div class="metric-row" style="margin-top:0.75rem;">
-        <div class="metric"><div class="metric-value" id="peak-I">—</div><div class="metric-label">Peak infected</div></div>
-        <div class="metric"><div class="metric-value" id="peak-t">—</div><div class="metric-label">Time to peak</div></div>
-        <div class="metric"><div class="metric-value" id="total-R">—</div><div class="metric-label">Total infected</div></div>
+      <div class="gauge">
+        <div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.25rem;">Effective reproduction number at t = 0</div>
+        <div class="big" id="re-display"></div>
+        <div id="re-label" style="font-size:0.78rem;margin-top:0.25rem;"></div>
+        <div class="sub" id="r0-sub"></div>
       </div>
     </div>
 
     <!-- ── Plots ─────────────────────────────────────────────────────────── -->
-    <div>
-      <div class="plot-box" id="ts-plot" style="height:300px;"></div>
-      <div class="plot-box" id="phase-plot" style="height:220px; margin-top:0.75rem;"></div>
+    <div class="plot-panel">
+      <div class="plot-box"><div id="ts-plot" style="height:300px;"></div></div>
+      <div class="plot-box"><div id="phase-plot" style="height:240px;"></div></div>
+
+      <div class="metrics-row cols-3">
+        <div class="metric"><div class="metric-label">Peak infected</div><div class="metric-value" id="peak-I">—</div></div>
+        <div class="metric"><div class="metric-label">Time to peak</div><div class="metric-value" id="peak-t">—</div></div>
+        <div class="metric"><div class="metric-label" id="total-label">Total ever infected</div><div class="metric-value" id="total-R">—</div></div>
+      </div>
+
+      <div class="plot-box info-box">
+        <h3>Jacobian of the (S, I) system</h3>
+        <div id="jac-gen"></div>
+        <h3>Disease-free equilibrium</h3>
+        <div id="dfe"></div>
+        <div class="verdict" id="dfe-verdict"></div>
+        <div id="endemic-wrap">
+          <h3>Endemic equilibrium</h3>
+          <div id="endemic"></div>
+          <div class="verdict" id="endemic-verdict"></div>
+        </div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 Where the threshold R₀ = 1 comes from</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            Since $S + I + R = N$ is constant, the behavior is captured by the $(S, I)$ system. At any disease-free
+            point $(S_0, 0)$ the Jacobian is upper triangular, so its eigenvalues can be read off the diagonal:
+          </p>
+          <p>$$J(S_0, 0) = \begin{pmatrix} 0 & -\beta S_0/N \\ 0 & \beta S_0/N - (\gamma + q)\end{pmatrix},
+                \qquad \lambda_2 = \frac{\beta S_0}{N} - (\gamma + q).$$</p>
+          <p>
+            A small outbreak grows exactly when $\lambda_2 > 0$, i.e. when
+            $\mathcal{R}_e = \dfrac{\beta}{\gamma + q}\cdot\dfrac{S_0}{N} > 1$.
+            With everyone susceptible this is the basic reproduction number $\mathcal{R}_0 = \beta/(\gamma + q)$.
+          </p>
+          <p>
+            <strong>Vaccination</strong> lowers $S_0/N$; the epidemic cannot take off once the vaccinated fraction exceeds
+            $1 - 1/\mathcal{R}_0$ (herd immunity). <strong>Quarantine</strong> raises the removal rate from $\gamma$ to
+            $\gamma + q$, lowering $\mathcal{R}_0$ itself. Either one can push $\lambda_2$ below zero.
+          </p>
+          <p>
+            In the SIRS model, immunity wanes, susceptibles are replenished, and when $\mathcal{R}_0 > 1$ the disease
+            settles at an <strong>endemic equilibrium</strong> instead of dying out.
+          </p>
+        </div>
+      </div>
     </div>
 
   </div>
 </div>
 
 <script>
-let scheduledRaf = null;
-function sv(id,val,dp){document.getElementById(id).textContent=dp!==''?(+val).toFixed(dp):val;}
-function schedule(){if(scheduledRaf)cancelAnimationFrame(scheduledRaf);scheduledRaf=requestAnimationFrame(build);}
+const KX = {throwOnError:false};
+const PLOT_BG = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)', font:{color:'#D2E0EE', size:11}};
+const GRID = 'rgba(255,255,255,0.06)';
 
-document.querySelector('input[name="model"][value="sirs"]').addEventListener('change',()=>{
-  document.getElementById('omega-row').style.display='block'; schedule();
-});
-document.querySelector('input[name="model"][value="sir"]').addEventListener('change',()=>{
-  document.getElementById('omega-row').style.display='none'; schedule();
-});
+let scheduledRaf = null;
+function sv(id, val, dp) { document.getElementById(id).textContent = (+val).toFixed(dp); }
+function schedule() { if (scheduledRaf) cancelAnimationFrame(scheduledRaf); scheduledRaf = requestAnimationFrame(build); }
+function fmt(x, dp=3) { if (Math.abs(x) < 5e-10) x = 0; return String(parseFloat(x.toFixed(dp))); }
+function isSIRS() { return document.querySelector('input[name="model"]:checked').value === 'sirs'; }
+
+function onModel() {
+  const sirs = isSIRS();
+  document.getElementById('omega-row').style.display = sirs ? 'block' : 'none';
+  const eq = sirs
+    ? `\\dot S = -\\tfrac{\\beta SI}{N} + \\omega R,\\quad \\dot I = \\tfrac{\\beta SI}{N} - (\\gamma + q) I,\\quad \\dot R = (\\gamma + q) I - \\omega R`
+    : `\\dot S = -\\tfrac{\\beta SI}{N},\\quad \\dot I = \\tfrac{\\beta SI}{N} - (\\gamma + q) I,\\quad \\dot R = (\\gamma + q) I`;
+  document.getElementById('top-eq').innerHTML = katex.renderToString(eq, KX);
+  schedule();
+}
 
 function rk4(F, t, state, h) {
-  const k1=F(t,state), k2=F(t+h/2,state.map((s,i)=>s+h/2*k1[i]));
-  const k3=F(t+h/2,state.map((s,i)=>s+h/2*k2[i])), k4=F(t+h,state.map((s,i)=>s+h*k3[i]));
-  return state.map((s,i)=>s+h/6*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+  const k1 = F(t, state), k2 = F(t + h/2, state.map((s, i) => s + h/2*k1[i]));
+  const k3 = F(t + h/2, state.map((s, i) => s + h/2*k2[i])), k4 = F(t + h, state.map((s, i) => s + h*k3[i]));
+  return state.map((s, i) => s + h/6*(k1[i] + 2*k2[i] + 2*k3[i] + k4[i]));
+}
+
+function eig2(a, b, c, d) {
+  const T = a + d, D = a*d - b*c, disc = T*T - 4*D;
+  if (disc >= 0) { const s = Math.sqrt(disc); return {real:true, l1:(T + s)/2, l2:(T - s)/2, T, D}; }
+  return {real:false, alpha:T/2, beta:Math.sqrt(-disc)/2, T, D};
+}
+function eigTex(E) {
+  return E.real ? `\\lambda_1 = ${fmt(E.l1, 4)},\\quad \\lambda_2 = ${fmt(E.l2, 4)}`
+                : `\\lambda = ${fmt(E.alpha, 4)} \\pm ${fmt(E.beta, 4)}\\,i`;
+}
+function matTex(M) {
+  return `\\begin{pmatrix} ${fmt(M[0][0], 4)} & ${fmt(M[0][1], 4)} \\\\ ${fmt(M[1][0], 4)} & ${fmt(M[1][1], 4)} \\end{pmatrix}`;
 }
 
 function build() {
-  const beta=+document.getElementById('beta-s').value;
-  const gamma=+document.getElementById('gamma-s').value;
-  const omega=+document.getElementById('omega-s').value;
-  const N=+document.getElementById('N-s').value;
-  const I0=+document.getElementById('I0-s').value;
-  const vax=+document.getElementById('vax-s').value/100;
-  const tMax=+document.getElementById('T-s').value;
-  const isSIRS=document.querySelector('input[name="model"]:checked').value==='sirs';
+  const beta  = +document.getElementById('beta-s').value;
+  const gamma = +document.getElementById('gamma-s').value;
+  const omega = +document.getElementById('omega-s').value;
+  const N     = +document.getElementById('N-s').value;
+  const I0    = +document.getElementById('I0-s').value;
+  const vax   = +document.getElementById('vax-s').value/100;
+  const q     = +document.getElementById('q-s').value;
+  const tMax  = +document.getElementById('T-s').value;
+  const sirs  = isSIRS();
+  const rem   = gamma + q;                      // total removal rate from I
 
-  const S0=N*(1-vax)-I0, R0_ic=N*vax;
-  const R0=beta*S0/gamma;
+  const S0 = Math.max(0, N*(1 - vax) - I0), R0_ic = N - S0 - I0;
+  const R0 = beta/rem, Re = R0*S0/N, Sstar = N/R0;
 
-  // R₀ display
-  const r0El=document.getElementById('r0-display');
-  const r0Lab=document.getElementById('r0-label');
-  r0El.textContent=R0.toFixed(2);
-  if(R0>1){r0El.style.color='#ff6b8a';r0Lab.textContent='Epidemic spreads (R₀>1)';r0Lab.style.color='#ff6b8a';}
-  else{r0El.style.color='#5de4c7';r0Lab.textContent='No epidemic (R₀≤1)';r0Lab.style.color='#5de4c7';}
+  // ── Gauge ──
+  const reEl = document.getElementById('re-display'), reLab = document.getElementById('re-label');
+  reEl.textContent = Re.toFixed(2);
+  const spreads = Re > 1;
+  reEl.style.color = reLab.style.color = spreads ? '#ff6b8a' : '#5de4c7';
+  reLab.textContent = spreads ? 'Outbreak grows (ℛₑ > 1)' : 'Outbreak dies out (ℛₑ ≤ 1)';
+  const herd = R0 > 1 ? `${((1 - 1/R0)*100).toFixed(0)}%` : 'none needed';
+  document.getElementById('r0-sub').innerHTML =
+    `Basic ℛ₀ = β/(γ + q) = <b>${R0.toFixed(2)}</b><br>ℛₑ = ℛ₀ · S₀/N<br>Herd-immunity vaccination level: <b>${herd}</b>`;
 
-  const F = isSIRS
-    ? (t,[S,I,R])=>[-beta*S*I/N+omega*R, beta*S*I/N-gamma*I, gamma*I-omega*R]
-    : (t,[S,I,R])=>[-beta*S*I/N, beta*S*I/N-gamma*I, gamma*I];
+  // ── Simulate ──
+  const F = sirs
+    ? (t, [S, I, R]) => [-beta*S*I/N + omega*R, beta*S*I/N - rem*I, rem*I - omega*R]
+    : (t, [S, I, R]) => [-beta*S*I/N, beta*S*I/N - rem*I, rem*I];
+  const h = 0.1, Ss = [S0], Is = [I0], Rs = [R0_ic], ts = [0];
+  let state = [S0, I0, R0_ic], everInfected = I0;
+  for (let t = 0; t < tMax - 1e-9; t += h) {
+    const inc0 = beta*state[0]*state[1]/N;
+    state = rk4(F, t, state, h);
+    everInfected += 0.5*h*(inc0 + beta*state[0]*state[1]/N);    // trapezoid rule on new infections βSI/N
+    Ss.push(Math.max(0, state[0])); Is.push(Math.max(0, state[1])); Rs.push(Math.max(0, state[2])); ts.push(t + h);
+  }
+  const peakI = Math.max(...Is), peakT = ts[Is.indexOf(peakI)];
+  document.getElementById('peak-I').textContent = Math.round(peakI).toLocaleString();
+  document.getElementById('peak-t').textContent = peakI > I0 + 1e-6 ? peakT.toFixed(1) + ' d' : 'at t = 0';
+  document.getElementById('total-R').textContent = Math.round(sirs ? everInfected : (N - Ss[Ss.length-1] - R0_ic)).toLocaleString();
+  document.getElementById('total-label').textContent = sirs ? 'Total infections (incl. reinfections)' : 'Total ever infected';
 
-  const h=0.1;
-  const Ss=[S0],Is=[I0],Rs=[R0_ic],ts=[0];
-  let state=[S0,I0,R0_ic];
-  for(let t=0;t<tMax;t+=h){
-    state=rk4(F,t,state,h);
-    Ss.push(Math.max(0,state[0]));
-    Is.push(Math.max(0,state[1]));
-    Rs.push(Math.max(0,state[2]));
-    ts.push(t+h);
+  // ── Time series ──
+  const tsTraces = [
+    {x:ts, y:Ss, mode:'lines', line:{color:'#4d9fff', width:2.2}, name:'S (Susceptible)'},
+    {x:ts, y:Is, mode:'lines', line:{color:'#ff6b8a', width:2.2}, name:'I (Infectious)'},
+    {x:ts, y:Rs, mode:'lines', line:{color:'#5de4c7', width:2.2}, name:'R (Removed)'},
+  ];
+  if (Sstar < N) tsTraces.push({x:[0, tMax], y:[Sstar, Sstar], mode:'lines', hoverinfo:'skip',
+    line:{color:'rgba(240,165,0,0.55)', width:1.2, dash:'dash'}, name:'S* = N/ℛ₀ (I peaks here)'});
+  Plotly.react('ts-plot', tsTraces, {
+    ...PLOT_BG, margin:{t:10, r:20, b:40, l:60},
+    xaxis:{range:[0, tMax], title:'t (days)', gridcolor:GRID},
+    yaxis:{range:[0, N], title:'Individuals', gridcolor:GRID},
+    showlegend:true, legend:{x:1.01, y:1, font:{size:9}},
+  }, {responsive:true, displayModeBar:false});
+
+  // ── Equilibria and Jacobians ──
+  document.getElementById('jac-gen').innerHTML = katex.renderToString(sirs
+    ? `J(S, I) = \\begin{pmatrix} -\\beta I/N - \\omega & -\\beta S/N - \\omega \\\\ \\beta I/N & \\beta S/N - (\\gamma + q) \\end{pmatrix} \\quad (R = N - S - I)`
+    : `J(S, I) = \\begin{pmatrix} -\\beta I/N & -\\beta S/N \\\\ \\beta I/N & \\beta S/N - (\\gamma + q) \\end{pmatrix}`,
+    {...KX, displayMode:true});
+
+  const Sdfe = sirs ? N : S0;                  // SIRS always returns to S = N; SIR has a line of DFEs
+  const Jd = sirs ? [[-omega, -beta*Sdfe/N - omega], [0, beta*Sdfe/N - rem]]
+                  : [[0, -beta*Sdfe/N], [0, beta*Sdfe/N - rem]];
+  const Ed = eig2(Jd[0][0], Jd[0][1], Jd[1][0], Jd[1][1]);
+  document.getElementById('dfe').innerHTML = katex.renderToString(
+    `J(${fmt(Sdfe, 1)},\\,0) = ${matTex(Jd)},\\qquad ${eigTex(Ed)}`, {...KX, displayMode:true});
+  const lam = beta*Sdfe/N - rem;
+  document.getElementById('dfe-verdict').textContent = sirs
+    ? `λ = βS/N − (γ + q) = ${fmt(lam, 4)} ${lam > 0 ? '> 0: the disease-free state is an unstable saddle, so the disease invades (ℛ₀ > 1).' : '≤ 0: the disease-free state is stable, so the disease dies out (ℛ₀ ≤ 1).'}`
+    : `Every point (S, 0) is an equilibrium, so one eigenvalue is 0. The other, λ₂ = βS₀/N − (γ + q) = ${fmt(lam, 4)}, ${lam > 0 ? 'is positive: infections grow at first, so an epidemic occurs (ℛₑ > 1).' : 'is not positive: infections decline from the start (ℛₑ ≤ 1).'}`;
+
+  const endWrap = document.getElementById('endemic-wrap');
+  let endemic = null;
+  if (sirs && R0 > 1) {
+    const Se = Sstar, Ie = omega*(N - Se)/(rem + omega);
+    const Je = [[-beta*Ie/N - omega, -beta*Se/N - omega], [beta*Ie/N, beta*Se/N - rem]];
+    const Ee = eig2(Je[0][0], Je[0][1], Je[1][0], Je[1][1]);
+    endemic = [Se, Ie];
+    endWrap.style.display = '';
+    document.getElementById('endemic').innerHTML = katex.renderToString(
+      `(S^*, I^*) = \\left(\\tfrac{N}{\\mathcal{R}_0},\\ \\tfrac{\\omega(N - S^*)}{\\gamma + q + \\omega}\\right) = (${fmt(Se, 1)},\\ ${fmt(Ie, 1)}),\\qquad J = ${matTex(Je)},\\quad ${eigTex(Ee)}`,
+      {...KX, displayMode:true});
+    const stable = Ee.real ? (Ee.l1 < 0 && Ee.l2 < 0) : Ee.alpha < 0;
+    document.getElementById('endemic-verdict').textContent =
+      `${stable ? 'Stable' : 'Unstable'} ${Ee.real ? 'node' : 'spiral'}: the epidemic ${stable ? (Ee.real ? 'settles' : 'oscillates in damped waves and settles') : 'moves away'} to about ${Math.round(Ie)} people infected at any time.`;
+  } else if (sirs) {
+    endWrap.style.display = '';
+    document.getElementById('endemic').innerHTML = '';
+    document.getElementById('endemic-verdict').textContent = 'No endemic equilibrium: it exists only when ℛ₀ > 1.';
+  } else {
+    endWrap.style.display = 'none';
   }
 
-  const peakI=Math.max(...Is), peakIdx=Is.indexOf(peakI);
-  const peakT=ts[peakIdx];
-  const totalR=Rs[Rs.length-1];
-
-  document.getElementById('peak-I').textContent=Math.round(peakI).toLocaleString();
-  document.getElementById('peak-t').textContent=peakT.toFixed(1);
-  document.getElementById('total-R').textContent=Math.round(totalR).toLocaleString();
-
-  // Herd immunity threshold
-  const herd=(1-1/Math.max(R0,0.001))*N;
-
-  // ── Time series ─────────────────────────────────────────────────────────────
-  const tsTraces=[
-    {x:ts,y:Ss,mode:'lines',line:{color:'#4d9fff',width:2.2},name:'S (Susceptible)'},
-    {x:ts,y:Is,mode:'lines',line:{color:'#ff6b8a',width:2.2},name:'I (Infectious)'},
-    {x:ts,y:Rs,mode:'lines',line:{color:'#5de4c7',width:2.2},name:'R (Recovered)'},
-    {x:[0,tMax],y:[peakI,peakI],mode:'lines',line:{color:'rgba(255,107,138,0.3)',width:1,dash:'dot'},hoverinfo:'skip',showlegend:false},
-    {x:[0,tMax],y:[herd,herd],mode:'lines',line:{color:'rgba(240,165,0,0.3)',width:1,dash:'dash'},name:'Herd immunity S*',hoverinfo:'skip'},
+  // ── Phase portrait in the S–I plane ──
+  const phTraces = [
+    {x:Ss, y:Is, mode:'lines', line:{color:'#b57ff5', width:2}, name:'Trajectory'},
+    {x:[S0], y:[I0], mode:'markers', marker:{color:'#f0a500', size:9}, name:`Start (${Math.round(S0)}, ${I0})`},
+    {x:[Ss[Ss.length-1]], y:[Is[Is.length-1]], mode:'markers', marker:{color:'#5de4c7', size:9, symbol:'square'}, name:'End state', showlegend:false},
   ];
-  Plotly.react('ts-plot',tsTraces,{
-    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
-    font:{color:'#D2E0EE',size:11},
-    margin:{t:10,r:20,b:40,l:60},
-    xaxis:{range:[0,tMax],title:'t (days)',gridcolor:'rgba(255,255,255,0.06)'},
-    yaxis:{range:[0,N],title:'Individuals',gridcolor:'rgba(255,255,255,0.06)'},
-    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
-  },{responsive:true,displayModeBar:false});
-
-  // ── Phase portrait in S-I plane ─────────────────────────────────────────────
-  const phTraces=[
-    {x:Ss,y:Is,mode:'lines',line:{color:'#b57ff5',width:2},name:'Trajectory'},
-    {x:[S0],y:[I0],mode:'markers',marker:{color:'#f0a500',size:9},name:`IC (${Math.round(S0)},${I0})`},
-    {x:[Ss[Ss.length-1]],y:[Is[Is.length-1]],mode:'markers',marker:{color:'#5de4c7',size:9,symbol:'square'},name:'End state',showlegend:false},
-  ];
-  Plotly.react('phase-plot',phTraces,{
-    paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(16,32,56,0.6)',
-    font:{color:'#D2E0EE',size:11},
-    margin:{t:10,r:20,b:40,l:60},
-    xaxis:{range:[0,N],title:'S (Susceptible)',gridcolor:'rgba(255,255,255,0.06)'},
-    yaxis:{title:'I (Infectious)',gridcolor:'rgba(255,255,255,0.06)'},
-    showlegend:true,legend:{x:1.01,y:1,font:{size:9}},
-  },{responsive:true,displayModeBar:false});
+  if (Sstar < N) phTraces.push({x:[Sstar, Sstar], y:[0, Math.max(peakI, I0)*1.05], mode:'lines', hoverinfo:'skip',
+    line:{color:'rgba(240,165,0,0.55)', width:1.2, dash:'dash'}, name:'S* (I′ = 0)'});
+  if (endemic) phTraces.push({x:[endemic[0]], y:[endemic[1]], mode:'markers', name:'Endemic equilibrium',
+    marker:{color:'#ff6b8a', size:11, symbol:'diamond', line:{color:'white', width:1.5}}});
+  Plotly.react('phase-plot', phTraces, {
+    ...PLOT_BG, margin:{t:10, r:20, b:40, l:60},
+    xaxis:{range:[0, N], title:'S (Susceptible)', gridcolor:GRID},
+    yaxis:{title:'I (Infectious)', rangemode:'tozero', gridcolor:GRID},
+    showlegend:true, legend:{x:1.01, y:1, font:{size:9}},
+  }, {responsive:true, displayModeBar:false});
 }
 
-window.addEventListener('load', build);
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+window.addEventListener('load', onModel);
 </script>
 </body>
 </html>

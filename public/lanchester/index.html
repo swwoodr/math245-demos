@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lanchester Combat Models</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .top-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1rem; }
+    @media (max-width: 900px) { .top-grid { grid-template-columns:1fr; } }
+    .info-box { padding:0.9rem 1.1rem; line-height:1.8; font-size:0.9rem; overflow-x:auto; }
+    .info-box .note { color:var(--muted); font-size:0.85rem; line-height:1.55; }
+    .model-desc { font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; }
+    .blue { color:#4d9fff; } .red { color:#f46f7b; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Lanchester Combat Models</h1>
+  <p class="demo-eq" id="top-eq">&nbsp;</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Type of Combat</div>
+      <div class="radio-group">
+        <label class="radio-option"><input type="radio" name="model" value="aimed" checked onchange="onModel()"> Aimed fire (square law)</label>
+        <label class="radio-option"><input type="radio" name="model" value="area" onchange="onModel()"> Area fire (linear law)</label>
+        <label class="radio-option"><input type="radio" name="model" value="mixed" onchange="onModel()"> Guerrilla vs. conventional</label>
+      </div>
+      <div class="model-desc" id="model-desc"></div>
+
+      <div class="ctrl-section">Initial Forces</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label"><span class="blue">Blue</span> x₀ <span class="ctrl-val" id="x0-v">60</span></div>
+        <input type="range" id="x0-s" min="1" max="100" step="1" value="60" oninput="schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label"><span class="red">Red</span> y₀ <span class="ctrl-val" id="y0-v">40</span></div>
+        <input type="range" id="y0-s" min="1" max="100" step="1" value="40" oninput="schedule()">
+      </div>
+
+      <div class="ctrl-section">Effectiveness</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label" id="a-label">a <span class="ctrl-val" id="a-v">—</span></div>
+        <input type="range" id="a-s" oninput="schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label" id="b-label">b <span class="ctrl-val" id="b-v">—</span></div>
+        <input type="range" id="b-s" oninput="schedule()">
+      </div>
+
+      <div class="ctrl-section">Reinforcements (per unit time)</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label"><span class="blue">Blue</span> P <span class="ctrl-val" id="P-v">0.0</span></div>
+        <input type="range" id="P-s" min="0" max="5" step="0.1" value="0" oninput="schedule()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label"><span class="red">Red</span> Q <span class="ctrl-val" id="Q-v">0.0</span></div>
+        <input type="range" id="Q-s" min="0" max="5" step="0.1" value="0" oninput="schedule()">
+      </div>
+
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Winner</div><div class="metric-value plain" id="m-win">—</div></div>
+        <div class="metric"><div class="metric-label">Battle ends at</div><div class="metric-value" id="m-T">—</div></div>
+        <div class="metric"><div class="metric-label">Survivors</div><div class="metric-value" id="m-surv">—</div></div>
+        <div class="metric"><div class="metric-label" id="m-need-label">Blue needs x₀ &gt;</div><div class="metric-value" id="m-need">—</div></div>
+      </div>
+
+      <div class="top-grid">
+        <div class="plot-box"><div id="t-plot" style="height:360px;"></div></div>
+        <div class="plot-box"><div id="p-plot" style="height:360px;"></div></div>
+      </div>
+
+      <div class="plot-box info-box">
+        <div id="law"></div>
+        <div class="note" id="law-note"></div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 Where the laws come from</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            <strong>Aimed fire</strong> (each shooter can target individual enemies): a side's loss rate depends only on
+            how many enemy shooters there are, so $x' = -a\,y$, $y' = -b\,x$. Dividing,
+            $\dfrac{dy}{dx} = \dfrac{b\,x}{a\,y}$, which separates to $a\,y\,dy = b\,x\,dx$ and integrates to
+          </p>
+          <p>$$b\,x^2 - a\,y^2 = b\,x_0^2 - a\,y_0^2 = K.$$</p>
+          <p>
+            Blue wins exactly when $K > 0$. Fighting strength grows with the <em>square</em> of numbers: doubling a force
+            is worth quadrupling its effectiveness, which is why concentrating force matters.
+          </p>
+          <p>
+            <strong>Area fire</strong> (firing into a region, e.g. artillery): losses also depend on how densely the target
+            is packed, so $x' = -a\,x\,y$, $y' = -b\,x\,y$. Now $dy/dx = b/a$ and $b\,x - a\,y$ is conserved — strength
+            is only <em>linear</em> in numbers.
+          </p>
+          <p>
+            <strong>Guerrilla vs. conventional</strong>: the hidden guerrilla force $x$ takes area fire, $x' = -a\,x\,y$,
+            while the exposed conventional force takes aimed fire, $y' = -b\,x$. This gives $a\,y^2 - 2b\,x = \text{const}$
+            (a parabolic law), and the conventional side needs a large numerical advantage to win.
+          </p>
+          <p>
+            Each is a nonlinear or linear autonomous system, so the phase-plane ideas from Block III apply directly: the
+            conserved quantity traces out the trajectory, and the line or curve where it equals zero separates the two
+            outcomes. Reinforcements (constant $P$, $Q$ added to $x'$ and $y'$) break the conservation law, so the
+            winning regions are no longer drawn.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:52, r:16, t:32, b:44}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+const LEGEND = {x:0.99, xanchor:'right', y:0.99, bgcolor:'rgba(12,26,48,0.8)', bordercolor:'#1A304D', borderwidth:1, font:{size:11}};
+const BLUE = '#4d9fff', RED = '#f46f7b';
+const KX = {throwOnError:false};
+
+const MODELS = {
+  aimed: {
+    eq: `x' = -a\\,y + P, \\qquad y' = -b\\,x + Q`,
+    desc: 'Both sides can see and target individual enemies (conventional forces in the open).',
+    a: ['a — Red kills per Red unit per time', 0.005, 0.2, 0.005, 0.05, 3],
+    b: ['b — Blue kills per Blue unit per time', 0.005, 0.2, 0.005, 0.05, 3],
+    rhs: (a, b, P, Q) => (x, y) => [-a*y + P, -b*x + Q],
+    K: (a, b, x, y) => b*x*x - a*y*y,
+    parity: (a, b, x) => Math.sqrt(b/a)*x,
+    needBlue: (a, b, y0) => y0*Math.sqrt(a/b),
+    needRed:  (a, b, x0) => x0*Math.sqrt(b/a),
+    survivors: (a, b, K) => K > 0 ? Math.sqrt(K/b) : Math.sqrt(-K/a),
+    lawTex: (a, b, x0, y0) => `b\\,x^2 - a\\,y^2 = ${fmt(b)}(${x0})^2 - ${fmt(a)}(${y0})^2 = ${fmt(b*x0*x0 - a*y0*y0, 3)}`,
+    asymptotic: [false, false],
+  },
+  area: {
+    eq: `x' = -a\\,x\\,y + P, \\qquad y' = -b\\,x\\,y + Q`,
+    desc: 'Both sides fire into an area without seeing individual targets (e.g. artillery or indirect fire).',
+    a: ['a — Red effectiveness (area fire)', 0.0002, 0.005, 0.0001, 0.001, 4],
+    b: ['b — Blue effectiveness (area fire)', 0.0002, 0.005, 0.0001, 0.001, 4],
+    rhs: (a, b, P, Q) => (x, y) => [-a*x*y + P, -b*x*y + Q],
+    K: (a, b, x, y) => b*x - a*y,
+    parity: (a, b, x) => (b/a)*x,
+    needBlue: (a, b, y0) => a*y0/b,
+    needRed:  (a, b, x0) => b*x0/a,
+    survivors: (a, b, K) => K > 0 ? K/b : -K/a,
+    lawTex: (a, b, x0, y0) => `b\\,x - a\\,y = ${fmt(b)}(${x0}) - ${fmt(a)}(${y0}) = ${fmt(b*x0 - a*y0, 4)}`,
+    asymptotic: [true, true],
+  },
+  mixed: {
+    eq: `x' = -a\\,x\\,y + P \\ \\text{(guerrilla)}, \\qquad y' = -b\\,x + Q \\ \\text{(conventional)}`,
+    desc: 'Blue is a concealed guerrilla force (Red must use area fire); Red is a conventional force Blue can target directly.',
+    a: ['a — Red effectiveness (area fire on Blue)', 0.0002, 0.005, 0.0001, 0.001, 4],
+    b: ['b — Blue kills per Blue unit per time', 0.005, 0.2, 0.005, 0.05, 3],
+    rhs: (a, b, P, Q) => (x, y) => [-a*x*y + P, -b*x + Q],
+    K: (a, b, x, y) => 2*b*x - a*y*y,
+    parity: (a, b, x) => Math.sqrt(2*b*x/a),
+    needBlue: (a, b, y0) => a*y0*y0/(2*b),
+    needRed:  (a, b, x0) => Math.sqrt(2*b*x0/a),
+    survivors: (a, b, K) => K > 0 ? K/(2*b) : Math.sqrt(-K/a),
+    lawTex: (a, b, x0, y0) => `2b\\,x - a\\,y^2 = 2(${fmt(b)})(${x0}) - ${fmt(a)}(${y0})^2 = ${fmt(2*b*x0 - a*y0*y0, 3)}`,
+    asymptotic: [true, false],
+  },
+};
+
+function g(id) { return parseFloat(document.getElementById(id).value); }
+function fmt(x, dp=4) { if (Math.abs(x) < 5e-12) x = 0; return String(parseFloat(x.toFixed(dp))); }
+function model() { return document.querySelector('input[name="model"]:checked').value; }
+
+function onModel() {
+  const M = MODELS[model()];
+  document.getElementById('model-desc').textContent = M.desc;
+  document.getElementById('top-eq').innerHTML = katex.renderToString(M.eq, {...KX, displayMode:false});
+  for (const k of ['a', 'b']) {
+    const [label, mn, mx, st, val] = M[k], el = document.getElementById(k + '-s');
+    el.min = mn; el.max = mx; el.step = st; el.value = val;
+    document.getElementById(k + '-label').firstChild.textContent = label + ' ';
+  }
+  build();
+}
+
+// RK4 until one side is destroyed (or, for area-fire losses that only decay exponentially, drops below 1%)
+function battle(F, x0, y0, asymptotic, tCap) {
+  const n = 6000, dt = tCap/n, ts = [0], xs = [x0], ys = [y0];
+  let x = x0, y = y0, end = null;
+  for (let i = 1; i <= n; i++) {
+    const k1 = F(x, y), k2 = F(x + dt/2*k1[0], y + dt/2*k1[1]);
+    const k3 = F(x + dt/2*k2[0], y + dt/2*k2[1]), k4 = F(x + dt*k3[0], y + dt*k3[1]);
+    let xn = x + dt/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]);
+    let yn = y + dt/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+    const t = i*dt;
+    const hit = (vn, v0, asym) => vn <= 0 || (asym && vn < 0.01*v0);
+    if (hit(xn, x0, asymptotic[0]) || hit(yn, y0, asymptotic[1])) {
+      const xLost = hit(xn, x0, asymptotic[0]);
+      const target = asymptotic[xLost ? 0 : 1] ? 0.01*(xLost ? x0 : y0) : 0;
+      const [v, vn] = xLost ? [x, xn] : [y, yn];
+      const s = vn <= target ? Math.min(1, Math.max(0, (v - target)/(v - vn))) : 1;
+      const te = t - dt + s*dt;
+      xn = x + s*(xn - x); yn = y + s*(yn - y);
+      if (!asymptotic[xLost ? 0 : 1]) { if (xLost) xn = 0; else yn = 0; }
+      ts.push(te); xs.push(xn); ys.push(yn);
+      end = {t: te, winner: xLost ? 'red' : 'blue', x: xn, y: yn};
+      break;
+    }
+    x = xn; y = yn; ts.push(t); xs.push(x); ys.push(y);
+  }
+  return {ts, xs, ys, end};
+}
+
+function build() {
+  const key = model(), M = MODELS[key];
+  const x0 = g('x0-s'), y0 = g('y0-s'), a = g('a-s'), b = g('b-s'), P = g('P-s'), Q = g('Q-s');
+  const dA = M.a[5], dB = M.b[5];
+  document.getElementById('x0-v').textContent = x0;
+  document.getElementById('y0-v').textContent = y0;
+  document.getElementById('a-v').textContent = a.toFixed(dA);
+  document.getElementById('b-v').textContent = b.toFixed(dB);
+  document.getElementById('P-v').textContent = P.toFixed(1);
+  document.getElementById('Q-v').textContent = Q.toFixed(1);
+  const reinf = P > 0 || Q > 0;
+
+  // Time scale: how long each side would take to wipe out the other at the initial rates
+  const r = M.rhs(a, b, 0, 0)(x0, y0);
+  const tScale = Math.max(x0/Math.abs(r[0] || 1e-9), y0/Math.abs(r[1] || 1e-9));
+  const tCap = Math.min(8*tScale, 5000);
+  const run = battle(M.rhs(a, b, P, Q), x0, y0, M.asymptotic, tCap);
+  const tEnd = run.end ? run.end.t : tCap;
+
+  // ── Metrics ──
+  const winEl = document.getElementById('m-win');
+  const Kstart = M.K(a, b, x0, y0);
+  if (!reinf && Math.abs(Kstart) < 1e-12) {
+    winEl.textContent = 'Draw'; winEl.style.color = 'var(--gold-light)';
+    document.getElementById('m-T').textContent = run.end ? 't = ' + run.end.t.toFixed(2) : '—';
+    document.getElementById('m-surv').textContent = '0';
+  } else if (run.end) {
+    winEl.textContent = run.end.winner === 'blue' ? 'Blue' : 'Red';
+    winEl.style.color = run.end.winner === 'blue' ? BLUE : RED;
+    document.getElementById('m-T').textContent = 't = ' + run.end.t.toFixed(2);
+    const surv = run.end.winner === 'blue' ? run.end.x : run.end.y;
+    document.getElementById('m-surv').textContent = surv.toFixed(1) + (run.end.winner === 'blue' ? ' Blue' : ' Red');
+  } else {
+    winEl.textContent = 'Undecided'; winEl.style.color = 'var(--gold-light)';
+    document.getElementById('m-T').textContent = `> ${tCap.toFixed(0)}`;
+    document.getElementById('m-surv').textContent = `${run.xs.at(-1).toFixed(1)} B / ${run.ys.at(-1).toFixed(1)} R`;
+  }
+  const needEl = document.getElementById('m-need');
+  if (reinf) { needEl.textContent = 'n/a'; document.getElementById('m-need-label').textContent = 'Break-even (no reinforcements)'; }
+  else {
+    document.getElementById('m-need-label').textContent = 'To win, Blue needs x₀ >';
+    needEl.textContent = M.needBlue(a, b, y0).toFixed(1);
+  }
+
+  // ── Time plot ──
+  Plotly.react('t-plot', [
+    {x:run.ts, y:run.xs, mode:'lines', name:'Blue x(t)', line:{color:BLUE, width:2.5}},
+    {x:run.ts, y:run.ys, mode:'lines', name:'Red y(t)', line:{color:RED, width:2.5}},
+  ], {
+    ...BASE, showlegend:true, legend:LEGEND,
+    title:{text:'Force strength over time', font:{size:13}},
+    xaxis:{title:'t', range:[0, tEnd*1.05], ...AX},
+    yaxis:{title:'Units remaining', rangemode:'tozero', ...AX},
+    shapes: run.end ? [{type:'line', xref:'x', yref:'paper', x0:tEnd, x1:tEnd, y0:0, y1:1, line:{color:'rgba(232,237,248,0.4)', width:1, dash:'dot'}}] : [],
+  }, CFG);
+
+  // ── Phase plane with winning regions ──
+  const L = Math.max(x0, y0, ...run.xs, ...run.ys)*1.15;
+  const pTr = [];
+  if (!reinf) {
+    const cx = [], cy = [];
+    for (let i = 0; i <= 200; i++) { const x = L*i/200; cx.push(x); cy.push(Math.min(M.parity(a, b, x), L)); }
+    pTr.push({x:cx, y:cy, mode:'lines', fill:'tozeroy', fillcolor:'rgba(77,159,255,0.12)', line:{color:'rgba(232,237,248,0.7)', width:1.5, dash:'dash'},
+              name:'Break-even: K = 0', hoverinfo:'skip'});
+    pTr.push({x:[...cx, L, 0], y:[...cy, L, L], mode:'lines', fill:'toself', fillcolor:'rgba(244,111,123,0.12)', line:{width:0},
+              hoverinfo:'skip', showlegend:false});
+    // A few other battles from the same family, for context
+    for (const f of [0.35, 0.6, 0.85]) {
+      for (const [sx, sy] of [[L*f, L*0.9], [L*0.9, L*f]]) {
+        const other = battle(M.rhs(a, b, 0, 0), sx, sy, M.asymptotic, 8*Math.max(sx/Math.abs(M.rhs(a,b,0,0)(sx,sy)[0]), sy/Math.abs(M.rhs(a,b,0,0)(sx,sy)[1])));
+        pTr.push({x:other.xs, y:other.ys, mode:'lines', line:{color:'rgba(232,237,248,0.22)', width:1}, hoverinfo:'skip', showlegend:false});
+      }
+    }
+  }
+  pTr.push({x:run.xs, y:run.ys, mode:'lines', name:'This battle', line:{color:'#f0a500', width:3}});
+  pTr.push({x:[x0], y:[y0], mode:'markers', name:'Start', marker:{color:'#f0a500', size:11, line:{color:'white', width:1.5}}});
+  if (run.end) pTr.push({x:[run.end.x], y:[run.end.y], mode:'markers', name:'End', marker:{color:'#e8edf8', size:10, symbol:'x'}});
+
+  const ann = reinf ? [] : [
+    {x:0.97, y:0.06, xref:'paper', yref:'paper', text:'Blue wins', showarrow:false, xanchor:'right', font:{color:BLUE, size:12}},
+    {x:0.04, y:0.95, xref:'paper', yref:'paper', text:'Red wins', showarrow:false, xanchor:'left', font:{color:RED, size:12}},
+  ];
+  Plotly.react('p-plot', pTr, {
+    ...BASE, showlegend:true, hovermode:false,
+    legend:{orientation:'h', x:0, y:-0.18, font:{size:11}},
+    margin:{l:52, r:16, t:32, b:80},
+    title:{text:reinf ? 'Phase plane (reinforcements on)' : 'Phase plane: who wins from each start?', font:{size:13}},
+    xaxis:{title:'Blue x', range:[0, L], ...AX}, yaxis:{title:'Red y', range:[0, L], ...AX},
+    annotations:ann,
+  }, CFG);
+
+  // ── Conservation law ──
+  const K = M.K(a, b, x0, y0);
+  if (reinf) {
+    document.getElementById('law').innerHTML = katex.renderToString(M.eq, {...KX, displayMode:true});
+    document.getElementById('law-note').textContent = 'With reinforcements the conserved quantity no longer exists, so the outcome comes from solving the system numerically.';
+  } else {
+    document.getElementById('law').innerHTML = katex.renderToString(M.lawTex(a, b, x0, y0) + ` = K`, {...KX, displayMode:true});
+    const pred = K > 0 ? 'Blue' : K < 0 ? 'Red' : 'neither side';
+    const surv = M.survivors(a, b, K);
+    const asym = M.asymptotic[0] ? ' Area-fire losses shrink exponentially and never quite reach zero, so the battle is called when the losing side is down to 1% of its starting strength.' : '';
+    document.getElementById('law-note').textContent = K === 0
+      ? 'K = 0: the forces are exactly matched and fight to mutual annihilation.'
+      : `K ${K > 0 ? '>' : '<'} 0, so ${pred} wins, with about ${surv.toFixed(1)} units left in a fight to the finish. To win, Red would need y₀ > ${M.needRed(a, b, x0).toFixed(1)}.${asym}`;
+  }
+}
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 60); }
+window.addEventListener('load', onModel);
+</script>
+</body>
+</html>

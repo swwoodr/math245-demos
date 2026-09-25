@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rocket Propulsion</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .cmp-table { width:100%; border-collapse:collapse; font-size:0.8125rem; }
+    .cmp-table th { background:var(--card-alt); color:var(--muted); font-weight:600; text-transform:uppercase;
+                    letter-spacing:0.06em; font-size:0.7rem; padding:0.45rem 0.6rem;
+                    border-bottom:1px solid var(--border); text-align:right; white-space:nowrap; }
+    .cmp-table th:first-child, .cmp-table td:first-child { text-align:left; }
+    .cmp-table td { padding:0.4rem 0.6rem; border-bottom:1px solid var(--border); text-align:right; font-family:monospace; white-space:nowrap; }
+    .cmp-table td:first-child { font-family:inherit; font-weight:500; }
+    .cmp-table tr:last-child td { border-bottom:none; }
+    .err { color:#D44848; }
+    .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+    .table-wrap { overflow-x:auto; padding:0.75rem 1rem 0.5rem; }
+    .note { font-size:0.75rem; color:var(--muted); padding:0.35rem 0.2rem 0; }
+    #scenario-desc { font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; }
+    #warn { display:none; margin-top:0.75rem; padding:0.6rem 0.75rem; border-radius:8px; font-size:0.82rem;
+            background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); color:#fca5a5; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Rocket Propulsion</h1>
+  <p class="demo-eq">$m(t)\,\dfrac{dv}{dt} = \underbrace{\beta c}_{\text{thrust}} - m(t)\,g - k\,v|v|, \qquad m(t) = m_0 - \beta t \ \text{ until burnout}$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Scenario</div>
+      <div class="ctrl-row">
+        <select id="preset-sel" onchange="loadPreset()">
+          <option value="model">Model rocket (C-class motor)</option>
+          <option value="sounding">Sounding rocket, no drag</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div id="scenario-desc"></div>
+      </div>
+
+      <div class="ctrl-section">Rocket</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Initial mass m₀ (kg) <span class="ctrl-val" id="m0-v">—</span></div>
+        <input type="range" id="m0-s" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Propellant mass (kg) <span class="ctrl-val" id="mp-v">—</span></div>
+        <input type="range" id="mp-s" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Burn rate β (kg/s) <span class="ctrl-val" id="be-v">—</span></div>
+        <input type="range" id="be-s" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Exhaust speed c (m/s) <span class="ctrl-val" id="c-v">—</span></div>
+        <input type="range" id="c-s" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Drag coefficient k (kg/m) <span class="ctrl-val" id="k-v">—</span></div>
+        <input type="range" id="k-s" oninput="onParam()">
+      </div>
+
+      <div class="ctrl-section">Numerical Methods</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Step size h (s) <span class="ctrl-val" id="h-v">—</span></div>
+        <input type="range" id="h-s" oninput="onStep()">
+      </div>
+      <div class="ctrl-row"><label class="radio-option"><input type="checkbox" id="show-euler" checked onchange="build()"> Euler</label></div>
+      <div class="ctrl-row"><label class="radio-option"><input type="checkbox" id="show-ie" checked onchange="build()"> Improved Euler</label></div>
+      <div class="ctrl-row"><label class="radio-option"><input type="checkbox" id="show-ode45" checked onchange="build()"> ode45 (adaptive)</label></div>
+
+      <div id="warn"></div>
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Burnout time t_b</div><div class="metric-value" id="m-tb">—</div></div>
+        <div class="metric"><div class="metric-label">Tsiolkovsky Δv = c ln(m₀/m_f)</div><div class="metric-value" id="m-dv">—</div></div>
+        <div class="metric"><div class="metric-label">Burnout speed, no drag</div><div class="metric-value" id="m-vb0">—</div></div>
+        <div class="metric"><div class="metric-label">Burnout speed, with drag</div><div class="metric-value" id="m-vb">—</div></div>
+      </div>
+
+      <div class="plot-box"><div id="y-plot" style="height:300px;"></div></div>
+      <div class="plot-box"><div id="v-plot" style="height:260px;"></div></div>
+
+      <div class="plot-box table-wrap">
+        <table class="cmp-table">
+          <thead><tr><th>Method</th><th>Steps</th><th>f evals</th><th>Burnout speed</th><th>|Error|</th><th>Max altitude</th><th>|Error|</th></tr></thead>
+          <tbody id="cmp-body"></tbody>
+        </table>
+        <div class="note">Each method solves the burn phase [0, t_b] and the coast phase separately, since the thrust
+          switches off abruptly at burnout. Errors are measured against a reference solution (RK4 with a very small step);
+          max altitude is interpolated to where v = 0. ode45 uses MATLAB's default tolerances (RelTol 10⁻³, AbsTol 10⁻⁶);
+          the diamonds mark the steps it chose.</div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 Deriving the rocket equation</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            Newton's second law for a body that is losing mass: exhaust leaves at speed $c$ relative to the rocket,
+            so over a short time $\Delta t$ the momentum balance gives
+            $m\,\dfrac{dv}{dt} = -c\,\dfrac{dm}{dt} + F_{\text{ext}}$. With a constant burn rate,
+            $\dfrac{dm}{dt} = -\beta$, $m(t) = m_0 - \beta t$, and the thrust is $\beta c$.
+          </p>
+          <p>
+            <strong>No drag, no gravity:</strong> $\dfrac{dv}{dt} = \dfrac{\beta c}{m_0 - \beta t}$ integrates to the
+            Tsiolkovsky rocket equation
+          </p>
+          <p>$$v(t) = v_0 + c\ln\frac{m_0}{m(t)}, \qquad \Delta v = c\ln\frac{m_0}{m_f}.$$</p>
+          <p>
+            <strong>With gravity</strong> (still no drag), subtract $g t$: the burnout speed is
+            $v_b = c\ln\dfrac{m_0}{m_f} - g\,t_b$ with $t_b = (m_0 - m_f)/\beta$. After burnout the rocket coasts
+            with constant mass $m_f$.
+          </p>
+          <p>
+            <strong>With drag</strong> $k\,v|v|$ there is no closed form, so we solve numerically — exactly the kind
+            of problem where Euler, Improved Euler, and <code>ode45</code> are compared. Because the thrust switches off
+            abruptly at burnout, the flight is solved in two pieces: the burn on $[0, t_b]$, then the coast starting
+            from the burnout state (in MATLAB, two <code>ode45</code> calls).
+          </p>
+          <p style="color:var(--muted);">
+            Simplifications: constant $g$ and constant air density, launched straight up from rest.
+            See the <a href="/euler/" style="color:var(--blue-bright);">ODE Solvers</a> demo for the methods themselves.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const G = 9.81;
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:64, r:16, t:32, b:44}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+const LEGEND = {x:0.99, xanchor:'right', y:0.99, bgcolor:'rgba(12,26,48,0.8)', bordercolor:'#1A304D', borderwidth:1, font:{size:11}};
+const COL = {ref:'#27A96C', euler:'#4A8FD4', ie:'#E87040', ode45:'#F59E0B'};
+
+// Each preset carries its own slider ranges: [min, max, step, value, decimals]
+const PRESETS = {
+  model: {
+    desc:'About 100 g with a C6-class motor (12.5 g of propellant burned in about 1.8 s). Drag matters a lot at this size.',
+    m0:[0.05, 0.5, 0.005, 0.1, 3], mp:[0.002, 0.05, 0.0005, 0.0125, 4], be:[0.001, 0.05, 0.0005, 0.0068, 4],
+    c:[200, 1500, 10, 800, 0], k:[0, 0.001, 0.00001, 0.00022, 5], h:[0.01, 1, 0.01, 0.2, 2],
+  },
+  sounding: {
+    desc:'A 1000 kg rocket with 800 kg of propellant and drag switched off, so the no-drag burnout formula should match exactly.',
+    m0:[200, 5000, 10, 1000, 0], mp:[50, 4000, 10, 800, 0], be:[2, 100, 1, 20, 0],
+    c:[500, 4000, 50, 2000, 0], k:[0, 0.05, 0.001, 0, 3], h:[0.5, 20, 0.5, 5, 1],
+  },
+};
+const KEYS = ['m0','mp','be','c','k','h'];
+let DEC = {};
+
+function g(id) { return parseFloat(document.getElementById(id).value); }
+function fmtNum(x, d) { return Math.abs(x) >= 1e4 ? x.toExponential(3) : x.toFixed(d); }
+function fmtErr(e) { return !isFinite(e) ? '—' : e < 1e-9 ? '< 1e−9' : e.toExponential(2).replace('e-', 'e−').replace('e+', 'e'); }
+
+function loadPreset() {
+  const key = document.getElementById('preset-sel').value;
+  if (key !== 'custom') {
+    const P = PRESETS[key];
+    document.getElementById('scenario-desc').textContent = P.desc;
+    KEYS.forEach(k => {
+      const [mn, mx, st, val, dec] = P[k], el = document.getElementById(k + '-s');
+      el.min = mn; el.max = mx; el.step = st; el.value = val; DEC[k] = dec;
+    });
+  }
+  build();
+}
+function onParam() {
+  document.getElementById('preset-sel').value = 'custom';
+  document.getElementById('scenario-desc').textContent = 'Adjust the rocket with the sliders.';
+  schedule();
+}
+function onStep() { schedule(); }
+
+// ── Model ─────────────────────────────────────────────────────────────────────
+// One right-hand side per phase, so the burn keeps its thrust right up to t = t_b
+function makeRHS(p) {
+  const mf = p.m0 - p.mp;
+  return {
+    burn:  (t, s) => [s[1], (p.be*p.c - p.k*s[1]*Math.abs(s[1]))/(p.m0 - p.be*t) - G],
+    coast: (t, s) => [s[1], -p.k*s[1]*Math.abs(s[1])/mf - G],
+  };
+}
+const landed = (t, s) => t > 0 && s[0] < 0;
+
+const eulerStep = (F, t, s, h) => { const k = F(t, s); return {s:[s[0] + h*k[0], s[1] + h*k[1]], evals:1}; };
+const heunStep  = (F, t, s, h) => {
+  const k1 = F(t, s), p = [s[0] + h*k1[0], s[1] + h*k1[1]], k2 = F(t + h, p);
+  return {s:[s[0] + h/2*(k1[0] + k2[0]), s[1] + h/2*(k1[1] + k2[1])], evals:2};
+};
+const rk4Step = (F, t, s, h) => {
+  const k1 = F(t, s), k2 = F(t + h/2, [s[0] + h/2*k1[0], s[1] + h/2*k1[1]]);
+  const k3 = F(t + h/2, [s[0] + h/2*k2[0], s[1] + h/2*k2[1]]), k4 = F(t + h, [s[0] + h*k3[0], s[1] + h*k3[1]]);
+  return {s:[s[0] + h/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]), s[1] + h/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1])], evals:4};
+};
+
+// Fixed-step integration over [t0, t1]; the last step is shortened to land exactly on t1
+function fixedPhase(F, stepFn, h, t0, s0, t1, stopOnLand) {
+  const ts = [t0], ys = [s0[0]], vs = [s0[1]];
+  let t = t0, s = s0.slice(), evals = 0;
+  while (t < t1 - 1e-12) {
+    const hh = Math.min(h, t1 - t), r = stepFn(F, t, s, hh);
+    s = r.s; evals += r.evals; t += hh;
+    ts.push(t); ys.push(s[0]); vs.push(s[1]);
+    if (stopOnLand && landed(t, s)) break;
+  }
+  return {ts, ys, vs, evals};
+}
+
+// Dormand–Prince RK4(5), the method behind MATLAB's ode45 (default RelTol 1e-3, AbsTol 1e-6, MaxStep = span/10)
+function ode45Phase(F, t0, s0, t1, stopOnLand, rtol=1e-3, atol=1e-6) {
+  const A = [[], [1/5], [3/40, 9/40], [44/45, -56/15, 32/9],
+             [19372/6561, -25360/2187, 64448/6561, -212/729],
+             [9017/3168, -355/33, 46732/5247, 49/176, -5103/18656]];
+  const C = [0, 1/5, 3/10, 4/5, 8/9, 1];
+  const B = [35/384, 0, 500/1113, 125/192, -2187/6784, 11/84];
+  const E = [71/57600, 0, -71/16695, 71/1920, -17253/339200, 22/525, -1/40];
+  const span = t1 - t0, hmax = span/10;
+  const ts = [t0], ys = [s0[0]], vs = [s0[1]];
+  let t = t0, s = s0.slice(), h = span/100, evals = 0;
+  for (let it = 0; it < 200000 && t < t1 - 1e-12; it++) {
+    h = Math.min(h, t1 - t);
+    const k = [];
+    for (let i = 0; i < 6; i++) {
+      const si = [0, 1].map(j => s[j] + h*A[i].reduce((acc, a, m) => acc + a*k[m][j], 0));
+      k.push(F(t + C[i]*h, si));
+    }
+    const s5 = [0, 1].map(j => s[j] + h*B.reduce((acc, b, m) => acc + b*k[m][j], 0));
+    k.push(F(t + h, s5)); evals += 7;
+    let q = 0;
+    for (const j of [0, 1]) {
+      const err = Math.abs(h*E.reduce((acc, e, m) => acc + e*k[m][j], 0));
+      q = Math.max(q, err/(atol + rtol*Math.max(Math.abs(s[j]), Math.abs(s5[j]))));
+    }
+    if (q <= 1) {
+      t += h; s = s5; ts.push(t); ys.push(s[0]); vs.push(s[1]);
+      if (stopOnLand && landed(t, s)) break;
+    }
+    h = Math.min(hmax, h*Math.min(5, Math.max(0.2, q > 0 ? 0.9*Math.pow(q, -0.2) : 5)));
+  }
+  return {ts, ys, vs, evals};
+}
+
+// Burn phase [0, t_b], then coast phase from t_b until the rocket lands
+function flight(F, tb, tCap, phase) {
+  const p1 = phase(F.burn, 0, [0, 0], tb, false);
+  const sb = [p1.ys.at(-1), p1.vs.at(-1)];
+  const p2 = phase(F.coast, tb, sb, tCap, true);
+  return {ts:[...p1.ts, ...p2.ts.slice(1)], ys:[...p1.ys, ...p2.ys.slice(1)], vs:[...p1.vs, ...p2.vs.slice(1)],
+          steps:p1.ts.length + p2.ts.length - 2, evals:p1.evals + p2.evals, vb:sb[1]};
+}
+
+// Cubic Hermite interpolation of y (whose derivative is v) between samples i-1 and i
+function hermiteY(r, i, s) {
+  const h = r.ts[i] - r.ts[i-1], y0 = r.ys[i-1], y1 = r.ys[i], m0 = r.vs[i-1], m1 = r.vs[i];
+  return (2*s**3 - 3*s**2 + 1)*y0 + (s**3 - 2*s**2 + s)*h*m0 + (-2*s**3 + 3*s**2)*y1 + (s**3 - s**2)*h*m1;
+}
+// Apogee: where v changes sign, interpolated
+function apogee(r) {
+  for (let i = 1; i < r.vs.length; i++) if (r.vs[i-1] > 0 && r.vs[i] <= 0)
+    return hermiteY(r, i, r.vs[i-1]/(r.vs[i-1] - r.vs[i]));
+  return Math.max(...r.ys);
+}
+// Smooth curve through ode45's steps (like MATLAB's default Refine = 4 output)
+function refine(r, F, tb) {
+  const tx = [r.ts[0]], yx = [r.ys[0]], vx = [r.vs[0]];
+  for (let i = 1; i < r.ts.length; i++) {
+    const h = r.ts[i] - r.ts[i-1], Fi = r.ts[i] <= tb + 1e-9 ? F.burn : F.coast;
+    const a0 = Fi(r.ts[i-1], [r.ys[i-1], r.vs[i-1]])[1], a1 = Fi(r.ts[i], [r.ys[i], r.vs[i]])[1];
+    for (const s of [0.25, 0.5, 0.75, 1]) {
+      const vH = (2*s**3 - 3*s**2 + 1)*r.vs[i-1] + (s**3 - 2*s**2 + s)*h*a0 + (-2*s**3 + 3*s**2)*r.vs[i] + (s**3 - s**2)*h*a1;
+      tx.push(r.ts[i-1] + s*h); yx.push(hermiteY(r, i, s)); vx.push(vH);
+    }
+  }
+  return {ts:tx, ys:yx, vs:vx};
+}
+
+function build() {
+  const p = {m0:g('m0-s'), mp:g('mp-s'), be:g('be-s'), c:g('c-s'), k:g('k-s')};
+  const h = g('h-s');
+  const warn = document.getElementById('warn');
+  let mpNote = '';
+  if (p.mp >= p.m0) { p.mp = 0.95*p.m0; mpNote = ' (capped at 95% of m₀)'; }
+  KEYS.forEach(k => { document.getElementById(k + '-v').textContent = fmtNum(k === 'h' ? h : p[k], DEC[k] ?? 3) + (k === 'mp' ? mpNote : ''); });
+
+  const tb = p.mp/p.be, mf = p.m0 - p.mp, dv = p.c*Math.log(p.m0/mf), vb0 = dv - G*tb;
+  document.getElementById('m-tb').textContent  = tb.toFixed(2) + ' s';
+  document.getElementById('m-dv').textContent  = dv.toFixed(1) + ' m/s';
+  document.getElementById('m-vb0').textContent = vb0.toFixed(1) + ' m/s';
+
+  if (p.be*p.c <= p.m0*G) {
+    warn.style.display = 'block';
+    warn.textContent = `Thrust βc = ${(p.be*p.c).toFixed(2)} N is less than the launch weight m₀g = ${(p.m0*G).toFixed(2)} N — the rocket cannot leave the pad. Increase β or c, or reduce m₀.`;
+    ['y-plot','v-plot'].forEach(id => Plotly.react(id, [], {...BASE, xaxis:AX, yaxis:AX}, CFG));
+    document.getElementById('cmp-body').innerHTML = '';
+    document.getElementById('m-vb').textContent = '—';
+    return;
+  }
+  warn.style.display = 'none';
+
+  const F = makeRHS(p);
+  // Rough flight-time cap from the no-drag trajectory
+  const coast = Math.max(vb0, 0)/G, tCap = Math.min(3*(tb + 2*coast) + 10, 5000);
+  const hRef = Math.min(tb/2000, tCap/40000);
+  const fixed = (stepFn, hh) => (F, t0, s0, t1, stop) => fixedPhase(F, stepFn, hh, t0, s0, t1, stop);
+  const ref = flight(F, tb, tCap, fixed(rk4Step, hRef));
+  const runs = {
+    euler: {name:'Euler', ...flight(F, tb, tCap, fixed(eulerStep, h))},
+    ie:    {name:'Improved Euler', ...flight(F, tb, tCap, fixed(heunStep, h))},
+    ode45: {name:'ode45', ...flight(F, tb, tCap, ode45Phase)},
+  };
+  const refVb = ref.vb, refTop = apogee(ref);
+  document.getElementById('m-vb').textContent = refVb.toFixed(1) + ' m/s';
+
+  // ── Plots ──
+  const tEnd = ref.ts[ref.ts.length-1];
+  const every = Math.max(1, Math.floor(ref.ts.length/2000));
+  const thin = arr => arr.filter((_, i) => i % every === 0 || i === arr.length - 1);
+  const yTr = [{x:thin(ref.ts), y:thin(ref.ys), mode:'lines', name:'Reference', line:{color:COL.ref, width:3}}];
+  const vTr = [{x:thin(ref.ts), y:thin(ref.vs), mode:'lines', name:'Reference', line:{color:COL.ref, width:3}}];
+  for (const key of ['euler', 'ie', 'ode45']) {
+    if (!document.getElementById('show-' + key).checked) continue;
+    const r = runs[key];
+    if (key === 'ode45') {
+      // Smooth dense-output curve plus markers at the steps ode45 actually took
+      const d = refine(r, F, tb), line = {color:COL[key], width:2};
+      yTr.push({x:d.ts, y:d.ys, mode:'lines', name:r.name, line, legendgroup:key});
+      yTr.push({x:r.ts, y:r.ys, mode:'markers', name:'ode45 steps', marker:{color:COL[key], size:6, symbol:'diamond'}, legendgroup:key});
+      vTr.push({x:d.ts, y:d.vs, mode:'lines', line, showlegend:false, legendgroup:key});
+      vTr.push({x:r.ts, y:r.vs, mode:'markers', marker:{color:COL[key], size:6, symbol:'diamond'}, showlegend:false, legendgroup:key});
+    } else {
+      const style = {mode:'lines', name:r.name, line:{color:COL[key], width:2, dash:'dash'}};
+      yTr.push({x:r.ts, y:r.ys, ...style});
+      vTr.push({x:r.ts, y:r.vs, ...style, showlegend:false});
+    }
+  }
+  const burnLine = {type:'line', xref:'x', yref:'paper', x0:tb, x1:tb, y0:0, y1:1, line:{color:'rgba(232,237,248,0.4)', width:1, dash:'dot'}};
+  const burnNote = {x:tb, y:1, xref:'x', yref:'paper', text:'burnout', showarrow:false, xanchor:'left', yanchor:'top', font:{size:10, color:'#89A4BC'}};
+  Plotly.react('y-plot', yTr, {
+    ...BASE, showlegend:true, legend:LEGEND,
+    title:{text:'Altitude y(t)', font:{size:13}},
+    xaxis:{title:'t (s)', range:[0, tEnd*1.02], ...AX}, yaxis:{title:'y (m)', rangemode:'tozero', ...AX},
+    shapes:[burnLine], annotations:[burnNote],
+  }, CFG);
+  Plotly.react('v-plot', vTr, {
+    ...BASE, showlegend:false,
+    title:{text:'Velocity v(t)', font:{size:13}},
+    xaxis:{title:'t (s)', range:[0, tEnd*1.02], ...AX}, yaxis:{title:'v (m/s)', ...AX},
+    shapes:[burnLine],
+  }, CFG);
+
+  // ── Comparison table ──
+  const row = (name, color, r, vb, top) =>
+    `<tr><td><span class="dot" style="background:${color}"></span>${name}</td><td>${r.steps}</td><td>${r.evals}</td>
+     <td>${vb.toFixed(2)} m/s</td><td class="err">${r === ref ? '—' : fmtErr(Math.abs(vb - refVb))}</td>
+     <td>${top.toFixed(1)} m</td><td class="err">${r === ref ? '—' : fmtErr(Math.abs(top - refTop))}</td></tr>`;
+  let html = row('Reference (RK4, tiny h)', COL.ref, ref, refVb, refTop);
+  for (const key of ['euler', 'ie', 'ode45']) {
+    const r = runs[key];
+    html += row(r.name, COL[key], r, r.vb, apogee(r));
+  }
+  document.getElementById('cmp-body').innerHTML = html;
+}
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 80); }
+window.addEventListener('load', loadPreset);
+</script>
+</body>
+</html>

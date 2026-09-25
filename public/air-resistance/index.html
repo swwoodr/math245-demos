@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Air Resistance &amp; Terminal Speed</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .cmp-table { width:100%; border-collapse:collapse; font-size:0.8125rem; }
+    .cmp-table th { background:var(--card-alt); color:var(--muted); font-weight:600; text-transform:uppercase;
+                    letter-spacing:0.06em; font-size:0.7rem; padding:0.45rem 0.65rem;
+                    border-bottom:1px solid var(--border); text-align:right; }
+    .cmp-table th:first-child, .cmp-table td:first-child { text-align:left; }
+    .cmp-table td { padding:0.4rem 0.65rem; border-bottom:1px solid var(--border); text-align:right; font-family:monospace; }
+    .cmp-table td:first-child { font-family:inherit; font-weight:500; }
+    .cmp-table tr:last-child td { border-bottom:none; }
+    .dot { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+    .table-wrap { overflow-x:auto; padding:0.75rem 1rem 0.5rem; }
+    #scenario-desc { font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Air Resistance &amp; Terminal Speed</h1>
+  <p class="demo-eq">$\dfrac{dv}{dt} = -g - \rho v \quad\text{(linear drag)} \qquad \dfrac{dv}{dt} = -g - \rho\, v\,|v| \quad\text{(quadratic drag)}$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">Scenario</div>
+      <div class="ctrl-row">
+        <select id="preset-sel" onchange="loadPreset()">
+          <option value="bolt">Crossbow bolt fired straight up</option>
+          <option value="skydiver">Skydiver dropped from 3000 m</option>
+          <option value="ball">Baseball thrown up from a rooftop</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div id="scenario-desc"></div>
+      </div>
+
+      <div class="ctrl-section">Launch</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Initial velocity v₀ (m/s, up = +) <span class="ctrl-val" id="v0-v">49</span></div>
+        <input type="range" id="v0-s" min="-50" max="100" step="1" value="49" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Initial height y₀ (m) <span class="ctrl-val" id="y0-v">0</span></div>
+        <input type="range" id="y0-s" min="0" max="3000" step="10" value="0" oninput="onParam()">
+      </div>
+
+      <div class="ctrl-section">Drag</div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Linear ρ (1/s) <span class="ctrl-val" id="rl-v">0.040</span></div>
+        <input type="range" id="rl-s" min="0.005" max="0.5" step="0.005" value="0.04" oninput="onParam()">
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Quadratic ρ (1/m) <span class="ctrl-val" id="rq-v">0.0011</span></div>
+        <input type="range" id="rq-s" min="0.0001" max="0.01" step="0.0001" value="0.0011" oninput="onParam()">
+      </div>
+
+      <div class="ctrl-section">Show</div>
+      <div class="ctrl-row"><label class="radio-option"><input type="checkbox" id="show-none" checked onchange="build()"> No air resistance</label></div>
+      <div class="ctrl-row"><label class="radio-option"><input type="checkbox" id="show-lin" checked onchange="build()"> Linear drag</label></div>
+      <div class="ctrl-row"><label class="radio-option"><input type="checkbox" id="show-quad" checked onchange="build()"> Quadratic drag</label></div>
+
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box"><div id="v-plot" style="height:300px;"></div></div>
+      <div class="plot-box"><div id="y-plot" style="height:280px;"></div></div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Terminal speed (linear)</div><div class="metric-value" id="m-vtl">—</div></div>
+        <div class="metric"><div class="metric-label">Terminal speed (quadratic)</div><div class="metric-value" id="m-vtq">—</div></div>
+        <div class="metric"><div class="metric-label">g</div><div class="metric-value plain">9.8 m/s²</div></div>
+        <div class="metric"><div class="metric-label">Time span shown</div><div class="metric-value plain" id="m-T">—</div></div>
+      </div>
+
+      <div class="plot-box table-wrap">
+        <table class="cmp-table">
+          <thead><tr><th>Model</th><th>Max height</th><th>Time to top</th><th>Time to ground</th><th>Impact speed</th></tr></thead>
+          <tbody id="cmp-body"></tbody>
+        </table>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 The models and their terminal speeds</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            Take up as positive. Newton's second law with gravity and a drag force opposing motion gives
+            $m\,\dfrac{dv}{dt} = -mg + F_R$. Dividing by $m$ and writing $\rho = k/m$:
+          </p>
+          <p>
+            <strong>Linear drag</strong> ($F_R = -kv$, slow or small objects):
+            $\dfrac{dv}{dt} = -\rho v - g$. This is linear first-order, so
+          </p>
+          <p>$$v(t) = \left(v_0 + \frac{g}{\rho}\right)e^{-\rho t} - \frac{g}{\rho}, \qquad v_\tau = \frac{g}{\rho}.$$</p>
+          <p>
+            <strong>Quadratic drag</strong> ($F_R = -kv|v|$, faster objects): $\dfrac{dv}{dt} = -g - \rho v|v|$.
+            It is separable on each leg: going up, $v' = -g - \rho v^2$; coming down, $v' = -g + \rho v^2$.
+            Setting $v' = 0$ on the way down gives
+          </p>
+          <p>$$v_\tau = \sqrt{g/\rho}.$$</p>
+          <p>
+            Either way, a falling object's speed levels off at the terminal speed $v_\tau$, where drag balances weight.
+            Notice that with drag the trip down takes longer than the trip up.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const G = 9.8, DT = 0.01, TMAX = 900;
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:56, r:16, t:32, b:44}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+const LEGEND = {x:0.99, xanchor:'right', y:0.99, bgcolor:'rgba(12,26,48,0.8)', bordercolor:'#1A304D', borderwidth:1, font:{size:11}};
+
+const MODELS = [
+  {key:'none', name:'No air resistance', color:'#89A4BC', dash:'dot'},
+  {key:'lin',  name:'Linear drag',       color:'#4d9fff', dash:'solid'},
+  {key:'quad', name:'Quadratic drag',    color:'#f0a500', dash:'solid'},
+];
+
+const PRESETS = {
+  bolt:     {v0:49,  y0:0,    rl:0.04, rq:0.0011, desc:'A crossbow bolt shot straight up at 49 m/s (about 110 mi/h). Compare how high it goes and how long it stays up under each model.'},
+  skydiver: {v0:0,   y0:3000, rl:0.18, rq:0.0034, desc:'Dropped from rest at 3000 m. Both drag models level off near 54 m/s (about 120 mi/h) instead of accelerating forever.'},
+  ball:     {v0:20,  y0:30,   rl:0.1,  rq:0.005,  desc:'Thrown up at 20 m/s from a 30 m roof. Drag lowers the peak and slows the fall to the street.'},
+  custom:   {v0:null, desc:'Set the launch and drag with the sliders.'},
+};
+
+function g(id) { return parseFloat(document.getElementById(id).value); }
+function setVal(id, v) { document.getElementById(id).value = v; }
+
+function accel(model, v, rl, rq) {
+  if (model === 'lin') return -G - rl*v;
+  if (model === 'quad') return -G - rq*v*Math.abs(v);
+  return -G;
+}
+
+// RK4 on (y, v) until the object reaches the ground (y = 0 after launch) or TMAX
+function fly(model, v0, y0, rl, rq) {
+  const ts = [0], ys = [y0], vs = [v0];
+  let t = 0, y = y0, v = v0, top = {t:0, y:y0}, ground = null;
+  const f = (y, v) => [v, accel(model, v, rl, rq)];
+  if (y0 <= 0 && v0 <= 0) return {ts, ys, vs, top, ground:{t:0, v:v0}};
+  while (t < TMAX) {
+    const k1 = f(y, v), k2 = f(y + DT/2*k1[0], v + DT/2*k1[1]);
+    const k3 = f(y + DT/2*k2[0], v + DT/2*k2[1]), k4 = f(y + DT*k3[0], v + DT*k3[1]);
+    const yn = y + DT/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]);
+    const vn = v + DT/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+    if (v > 0 && vn <= 0) {                           // apex: interpolate where v = 0
+      const s = v/(v - vn);
+      top = {t: t + s*DT, y: y + s*(yn - y)};
+    }
+    if (yn <= 0) {                                     // ground: interpolate where y = 0
+      const s = y/(y - yn);
+      ground = {t: t + s*DT, v: v + s*(vn - v)};
+      ts.push(ground.t); ys.push(0); vs.push(ground.v);
+      break;
+    }
+    t += DT; y = yn; v = vn;
+    ts.push(t); ys.push(y); vs.push(v);
+  }
+  if (top.t === 0) top = {t:0, y:y0};
+  return {ts, ys, vs, top, ground};
+}
+
+function loadPreset() {
+  const P = PRESETS[document.getElementById('preset-sel').value];
+  document.getElementById('scenario-desc').textContent = P.desc;
+  if (P.v0 !== null) { setVal('v0-s', P.v0); setVal('y0-s', P.y0); setVal('rl-s', P.rl); setVal('rq-s', P.rq); }
+  build();
+}
+function onParam() {
+  document.getElementById('preset-sel').value = 'custom';
+  document.getElementById('scenario-desc').textContent = PRESETS.custom.desc;
+  schedule();
+}
+
+function build() {
+  const v0 = g('v0-s'), y0 = g('y0-s'), rl = g('rl-s'), rq = g('rq-s');
+  document.getElementById('v0-v').textContent = v0.toFixed(0);
+  document.getElementById('y0-v').textContent = y0.toFixed(0);
+  document.getElementById('rl-v').textContent = rl.toFixed(3);
+  document.getElementById('rq-v').textContent = rq.toFixed(4);
+
+  const vtl = G/rl, vtq = Math.sqrt(G/rq);
+  document.getElementById('m-vtl').textContent = vtl.toFixed(1) + ' m/s';
+  document.getElementById('m-vtq').textContent = vtq.toFixed(1) + ' m/s';
+
+  const runs = {};
+  MODELS.forEach(M => { runs[M.key] = fly(M.key, v0, y0, rl, rq); });
+  const shown = MODELS.filter(M => document.getElementById('show-' + M.key).checked);
+
+  // Show until the last visible model lands
+  const tEnd = Math.max(1, ...shown.map(M => runs[M.key].ground ? runs[M.key].ground.t : TMAX));
+  document.getElementById('m-T').textContent = tEnd.toFixed(1) + ' s';
+
+  const vTr = [], yTr = [];
+  shown.forEach(M => {
+    const r = runs[M.key];
+    vTr.push({x:r.ts, y:r.vs, mode:'lines', name:M.name, line:{color:M.color, width:2.5, dash:M.dash}});
+    yTr.push({x:r.ts, y:r.ys, mode:'lines', name:M.name, line:{color:M.color, width:2.5, dash:M.dash}});
+    if (r.top.t > 0) yTr.push({x:[r.top.t], y:[r.top.y], mode:'markers', showlegend:false, hoverinfo:'skip',
+                               marker:{color:M.color, size:9, symbol:'diamond', line:{color:'white', width:1}}});
+  });
+  if (document.getElementById('show-lin').checked)
+    vTr.push({x:[0, tEnd], y:[-vtl, -vtl], mode:'lines', name:`−v_τ linear = −${vtl.toFixed(1)}`,
+              line:{color:'rgba(77,159,255,0.55)', width:1.3, dash:'dash'}, hoverinfo:'skip'});
+  if (document.getElementById('show-quad').checked)
+    vTr.push({x:[0, tEnd], y:[-vtq, -vtq], mode:'lines', name:`−v_τ quadratic = −${vtq.toFixed(1)}`,
+              line:{color:'rgba(240,165,0,0.55)', width:1.3, dash:'dash'}, hoverinfo:'skip'});
+
+  const vMin = Math.min(0, ...vTr.flatMap(t => t.y)), vMax = Math.max(0, ...vTr.flatMap(t => t.y));
+  Plotly.react('v-plot', vTr, {
+    ...BASE, showlegend:true, legend:LEGEND,
+    title:{text:'Velocity v(t) — negative means falling', font:{size:13}},
+    xaxis:{title:'t (s)', range:[0, tEnd], ...AX},
+    yaxis:{title:'v (m/s)', range:[vMin - 0.08*(vMax - vMin), vMax + 0.08*(vMax - vMin)], ...AX},
+  }, CFG);
+  Plotly.react('y-plot', yTr, {
+    ...BASE, showlegend:true, legend:LEGEND,
+    title:{text:'Height y(t) — diamonds mark the top of the flight', font:{size:13}},
+    xaxis:{title:'t (s)', range:[0, tEnd], ...AX},
+    yaxis:{title:'y (m)', rangemode:'tozero', ...AX},
+  }, CFG);
+
+  // Comparison table
+  document.getElementById('cmp-body').innerHTML = MODELS.map(M => {
+    const r = runs[M.key];
+    const top = r.top.t > 0 ? `${r.top.y.toFixed(1)} m` : `${y0.toFixed(1)} m (start)`;
+    const tTop = r.top.t > 0 ? `${r.top.t.toFixed(2)} s` : '—';
+    const tG = r.ground ? `${r.ground.t.toFixed(2)} s` : `> ${TMAX} s`;
+    const vG = r.ground ? `${Math.abs(r.ground.v).toFixed(1)} m/s` : '—';
+    return `<tr><td><span class="dot" style="background:${M.color}"></span>${M.name}</td><td>${top}</td><td>${tTop}</td><td>${tG}</td><td>${vG}</td></tr>`;
+  }).join('');
+}
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _t;
+function schedule() { clearTimeout(_t); _t = setTimeout(build, 60); }
+window.addEventListener('load', loadPreset);
+</script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Linearization of Nonlinear Systems</title>
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+          onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    .zoom-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:1rem; }
+    @media (max-width: 900px) { .zoom-grid { grid-template-columns:1fr; } }
+    .hint { font-size:0.8rem; color:var(--muted); padding:0.3rem 0.5rem 0.2rem; }
+    #global-plot { cursor:pointer; }
+    .info-box { padding:0.9rem 1.1rem; line-height:1.8; font-size:0.9rem; overflow-x:auto; }
+    .info-box h3 { font-size:0.72rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); font-weight:600; margin:0.2rem 0 0.1rem; }
+    .verdict { margin-top:0.5rem; padding:0.6rem 0.8rem; border-radius:8px; font-size:0.86rem; line-height:1.55; }
+    .verdict.ok   { background:rgba(52,211,153,0.10); border:1px solid rgba(52,211,153,0.35); }
+    .verdict.warn { background:rgba(251,191,36,0.10); border:1px solid rgba(251,191,36,0.4); }
+    .expr-in { width:100%; padding:0.35rem 0.5rem; margin-top:0.2rem; background:var(--card-alt); border:1px solid var(--border);
+               border-radius:6px; color:var(--white); font-family:monospace; font-size:0.85rem; }
+    .expr-err { color:#fca5a5; font-size:0.78rem; margin-top:0.3rem; display:none; }
+    #system-desc { font-size:0.78rem; color:var(--muted); margin:0.35rem 0 0.1rem; line-height:1.5; }
+  </style>
+</head>
+<body>
+<div class="demo-wrap">
+  <a class="back-link" href="/">← All Demos</a>
+  <h1>Linearization of Nonlinear Systems</h1>
+  <p class="demo-eq">$\mathbf{x}' = \mathbf{F}(\mathbf{x}) \ \approx\ J(\mathbf{x}^*)\,(\mathbf{x} - \mathbf{x}^*) \quad \text{near an equilibrium } \mathbf{F}(\mathbf{x}^*) = \mathbf{0}$</p>
+
+  <div class="demo-layout">
+
+    <!-- ── Controls ─────────────────────────────────────────────────────── -->
+    <div class="controls">
+
+      <div class="ctrl-section">System</div>
+      <div class="ctrl-row">
+        <select id="sys-sel" onchange="loadSystem()">
+          <option value="competing">Competing species</option>
+          <option value="pendulum">Damped pendulum</option>
+          <option value="vdp">Van der Pol oscillator</option>
+          <option value="centerfail">Linearization fails: center?</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div id="system-desc"></div>
+      </div>
+      <div id="custom-box" style="display:none;">
+        <div class="ctrl-row">
+          <div class="ctrl-label">x′ = f(x, y)</div>
+          <input class="expr-in" id="f-in" value="y" oninput="onCustom()" spellcheck="false">
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label">y′ = g(x, y)</div>
+          <input class="expr-in" id="g-in" value="x - x^3 - 0.5*y" oninput="onCustom()" spellcheck="false">
+          <div class="expr-err" id="expr-err"></div>
+        </div>
+        <div class="hint" style="padding:0 0 0.5rem;">Use x, y, +, −, *, /, ^, sin, cos, exp, sqrt, pi …</div>
+      </div>
+
+      <div class="ctrl-section">Equilibrium to Examine</div>
+      <div class="ctrl-row">
+        <select id="eq-sel" onchange="selectEq(+this.value)"></select>
+      </div>
+      <div class="ctrl-row">
+        <div class="ctrl-label">Zoom window half-width <span class="ctrl-val" id="w-v">0.50</span></div>
+        <input type="range" id="w-s" min="0.05" max="1.5" step="0.05" value="0.5"
+               oninput="document.getElementById('w-v').textContent=(+this.value).toFixed(2); scheduleZoom()">
+      </div>
+
+      <div class="ctrl-section">Display</div>
+      <div class="ctrl-row"><label class="radio-option"><input type="checkbox" id="show-field" checked onchange="build()"> Direction field</label></div>
+      <div class="ctrl-row"><label class="radio-option"><input type="checkbox" id="show-null" checked onchange="build()"> Nullclines (x′ = 0, y′ = 0)</label></div>
+
+    </div>
+
+    <!-- ── Plot panel ────────────────────────────────────────────────────── -->
+    <div class="plot-panel">
+
+      <div class="plot-box">
+        <div id="global-plot" style="height:440px;"></div>
+        <div class="hint">Click near an equilibrium to zoom in on it. The box shows the zoom window.</div>
+      </div>
+
+      <div class="zoom-grid">
+        <div class="plot-box"><div id="nl-plot" style="height:330px;"></div></div>
+        <div class="plot-box"><div id="lin-plot" style="height:330px;"></div></div>
+      </div>
+
+      <div class="metrics-row cols-4">
+        <div class="metric"><div class="metric-label">Equilibrium x*</div><div class="metric-value plain" id="m-eq" style="font-size:1rem;">—</div></div>
+        <div class="metric"><div class="metric-label">λ₁</div><div class="metric-value plain" id="m-l1">—</div></div>
+        <div class="metric"><div class="metric-label">λ₂</div><div class="metric-value plain" id="m-l2">—</div></div>
+        <div class="metric"><div class="metric-label">Linearized type</div><div class="metric-value plain" id="m-type" style="font-size:1rem;">—</div></div>
+      </div>
+
+      <div class="plot-box info-box">
+        <h3>Jacobian</h3>
+        <div id="jac-sym"></div>
+        <div id="jac-num"></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+
+      <div class="expander">
+        <div class="expander-head" onclick="toggleExp(this)">
+          <span>📐 Why linearization works — and when it doesn't</span>
+          <span class="expander-arrow">▼</span>
+        </div>
+        <div class="expander-body hidden">
+          <p>
+            Near an equilibrium $\mathbf{x}^*$, Taylor's theorem gives
+            $\mathbf{F}(\mathbf{x}) = \mathbf{F}(\mathbf{x}^*) + J(\mathbf{x}^*)(\mathbf{x} - \mathbf{x}^*) + \cdots$, and
+            $\mathbf{F}(\mathbf{x}^*) = \mathbf{0}$. Dropping the higher-order terms leaves the linear system
+            $\mathbf{u}' = J\mathbf{u}$ with $\mathbf{u} = \mathbf{x} - \mathbf{x}^*$ and
+          </p>
+          <p>$$J = \begin{pmatrix} \partial f/\partial x & \partial f/\partial y \\ \partial g/\partial x & \partial g/\partial y \end{pmatrix}_{\mathbf{x}^*}.$$</p>
+          <p>
+            If the equilibrium is <strong>hyperbolic</strong> (no eigenvalue of $J$ has zero real part), the nonlinear system
+            behaves like its linearization near $\mathbf{x}^*$: saddles stay saddles, spirals stay spirals, and stability
+            is the same. Shrink the zoom window and watch the two portraits become indistinguishable.
+          </p>
+          <p>
+            If the linearization is a <strong>center</strong> (purely imaginary eigenvalues) or has a zero eigenvalue, the
+            neglected terms decide the outcome, and linearization is <strong>inconclusive</strong> — try the
+            "Linearization fails" system. (When eigenvalues are real and equal, stability is still decided, but the
+            nonlinear system may be a node or a spiral.)
+          </p>
+          <p>
+            Related: <a href="/linear-systems/" style="color:var(--blue-bright);">Linear Systems x′ = Ax</a> for the linear
+            portraits themselves, and <a href="/lotka-volterra/" style="color:var(--blue-bright);">Predator-Prey Models</a>
+            for an application.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const CFG  = {displayModeBar:false, responsive:true};
+const BASE = {paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(16,32,56,0.6)',
+              font:{color:'#D2E0EE', family:'system-ui,-apple-system,sans-serif'},
+              margin:{l:44, r:16, t:32, b:40}};
+const AX   = {gridcolor:'#1A304D', zerolinecolor:'#2A4060', zerolinewidth:1.5};
+const KX   = {throwOnError:false};
+const TYPE_COLOR = {sink:'#34d399', source:'#f46f7b', saddle:'#fa8431', neutral:'#fbbf24'};
+
+const SYSTEMS = {
+  competing: {
+    f:'x*(3 - x - 2*y)', g:'y*(2 - x - y)', xr:[-0.4, 3.6], yr:[-0.4, 2.6], T:8,
+    tex:`x' = x(3 - x - 2y), \\qquad y' = y(2 - x - y)`,
+    jac:`J = \\begin{pmatrix} 3 - 2x - 2y & -2x \\\\ -y & 2 - x - 2y \\end{pmatrix}`,
+    desc:'Two species competing for the same resources. Four equilibria: extinction, either species alone, and a coexistence point.',
+  },
+  pendulum: {
+    f:'y', g:'-sin(x) - 0.25*y', xr:[-4.2, 4.2], yr:[-3, 3], T:12,
+    tex:`x' = y, \\qquad y' = -\\sin x - 0.25\\,y`,
+    jac:`J = \\begin{pmatrix} 0 & 1 \\\\ -\\cos x & -0.25 \\end{pmatrix}`,
+    desc:'x = angle, y = angular velocity. Hanging down (x = 0) is a stable spiral; balanced upright (x = ±π) is a saddle.',
+  },
+  vdp: {
+    f:'y', g:'(1 - x^2)*y - x', xr:[-3.5, 3.5], yr:[-3.5, 3.5], T:12,
+    tex:`x' = y, \\qquad y' = (1 - x^2)\\,y - x`,
+    jac:`J = \\begin{pmatrix} 0 & 1 \\\\ -2xy - 1 & 1 - x^2 \\end{pmatrix}`,
+    desc:'The origin is an unstable spiral, but trajectories do not escape — they settle onto a limit cycle. Linearization only describes behavior near the equilibrium.',
+  },
+  centerfail: {
+    f:'-y - x*(x^2 + y^2)', g:'x - y*(x^2 + y^2)', xr:[-1.5, 1.5], yr:[-1.5, 1.5], T:40,
+    tex:`x' = -y - x(x^2 + y^2), \\qquad y' = x - y(x^2 + y^2)`,
+    jac:`J = \\begin{pmatrix} -3x^2 - y^2 & -1 - 2xy \\\\ 1 - 2xy & -x^2 - 3y^2 \\end{pmatrix}`,
+    desc:'The linearization at the origin is a center (λ = ±i), but the cubic terms make every orbit slowly spiral inward. Linearization cannot tell the difference.',
+  },
+  custom: {f:null, g:null, xr:[-3, 3], yr:[-3, 3], T:10, tex:null, jac:null,
+           desc:'Enter your own system. Equilibria in the window are found automatically.'},
+};
+
+// ── Expression compiler (friendly syntax: ^, sin, pi, …) ─────────────────────
+function compile(expr) {
+  const src = expr.replace(/\^/g, '**');
+  const fn = new Function('x', 'y',
+    `const {sin,cos,tan,exp,log,sqrt,abs,atan,atan2,sinh,cosh,tanh,asin,acos,min,max,pow,sign,PI,E} = Math;
+     const pi = PI, e = E; return (${src});`);
+  const v = fn(0.37, -0.61);
+  if (typeof v !== 'number') throw new Error('Expression must evaluate to a number');
+  return fn;
+}
+
+// ── Linear algebra helpers ───────────────────────────────────────────────────
+function jacobian(F, x, y) {
+  const h = 1e-6, fx1 = F(x+h, y), fx0 = F(x-h, y), fy1 = F(x, y+h), fy0 = F(x, y-h);
+  return [[(fx1[0]-fx0[0])/(2*h), (fy1[0]-fy0[0])/(2*h)], [(fx1[1]-fx0[1])/(2*h), (fy1[1]-fy0[1])/(2*h)]];
+}
+function eig2(J) {
+  const [[a, b], [c, d]] = J, T = a+d, D = a*d-b*c, disc = T*T-4*D, tol = 1e-9*Math.max(1, T*T);
+  if (disc > tol) { const s = Math.sqrt(disc); return {T, D, type:'real', l1:(T+s)/2, l2:(T-s)/2}; }
+  if (disc < -tol) return {T, D, type:'complex', alpha:T/2, beta:Math.sqrt(-disc)/2};
+  return {T, D, type:'repeated', l1:T/2, l2:T/2};
+}
+function classify(E, J) {
+  const tol = 1e-7, turn = J[1][0] > 0 ? 'counterclockwise' : 'clockwise';
+  if (E.type === 'complex') {
+    if (Math.abs(E.alpha) < tol) return {name:`Center (${turn})`, kind:'neutral', hyperbolic:false};
+    return E.alpha < 0 ? {name:'Spiral sink', kind:'sink', hyperbolic:true} : {name:'Spiral source', kind:'source', hyperbolic:true};
+  }
+  const l1 = E.l1, l2 = E.l2;
+  if (Math.abs(l1) < tol || Math.abs(l2) < tol) return {name:'Zero eigenvalue', kind:'neutral', hyperbolic:false};
+  if (l1*l2 < 0) return {name:'Saddle point', kind:'saddle', hyperbolic:true};
+  const rep = E.type === 'repeated' ? ' (repeated λ)' : '';
+  return l1 < 0 ? {name:'Nodal sink' + rep, kind:'sink', hyperbolic:true} : {name:'Nodal source' + rep, kind:'source', hyperbolic:true};
+}
+function fmt(x, dp=3) { if (Math.abs(x) < 5e-8) x = 0; return String(parseFloat(x.toFixed(dp))); }
+function cText(re, im) {
+  const r = fmt(re), i = fmt(Math.abs(im));
+  return (r === '0' ? '' : r) + (im < 0 ? '−' : (r === '0' ? '' : '+')) + (i === '1' ? '' : i) + 'i';
+}
+
+// ── Numerics ─────────────────────────────────────────────────────────────────
+function rk4Path(F, x0, y0, T, dir, box) {
+  const h = 0.02*dir, n = Math.round(T/0.02), xs = [x0], ys = [y0];
+  let x = x0, y = y0;
+  const [x1, x2, y1, y2] = box;
+  for (let i = 0; i < n; i++) {
+    const k1 = F(x, y), k2 = F(x + h/2*k1[0], y + h/2*k1[1]);
+    const k3 = F(x + h/2*k2[0], y + h/2*k2[1]), k4 = F(x + h*k3[0], y + h*k3[1]);
+    x += h/6*(k1[0] + 2*k2[0] + 2*k3[0] + k4[0]); y += h/6*(k1[1] + 2*k2[1] + 2*k3[1] + k4[1]);
+    if (!isFinite(x) || !isFinite(y)) break;
+    xs.push(x); ys.push(y);
+    if (x < x1 || x > x2 || y < y1 || y > y2) break;
+  }
+  return {xs, ys};
+}
+function findEquilibria(F, xr, yr) {
+  const found = [], n = 14, span = Math.max(xr[1]-xr[0], yr[1]-yr[0]);
+  for (let i = 0; i <= n; i++) for (let j = 0; j <= n; j++) {
+    let x = xr[0] + (xr[1]-xr[0])*i/n, y = yr[0] + (yr[1]-yr[0])*j/n;
+    for (let it = 0; it < 60; it++) {
+      const Fv = F(x, y), J = jacobian(F, x, y), det = J[0][0]*J[1][1] - J[0][1]*J[1][0];
+      if (!isFinite(det) || Math.abs(det) < 1e-14) break;
+      const dx = ( J[1][1]*Fv[0] - J[0][1]*Fv[1])/det, dy = (-J[1][0]*Fv[0] + J[0][0]*Fv[1])/det;
+      x -= dx; y -= dy;
+      if (!isFinite(x) || !isFinite(y) || Math.abs(x) > 1e6) break;
+      if (Math.hypot(dx, dy) < 1e-13) break;
+    }
+    const r = F(x, y);
+    if (!isFinite(x) || Math.hypot(r[0], r[1]) > 1e-9) continue;
+    if (x < xr[0] || x > xr[1] || y < yr[0] || y > yr[1]) continue;
+    if (!found.some(p => Math.hypot(p[0]-x, p[1]-y) < 1e-5*span)) found.push([Math.abs(x) < 1e-10 ? 0 : x, Math.abs(y) < 1e-10 ? 0 : y]);
+  }
+  return found.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+}
+function fieldTrace(F, xr, yr, n, color) {
+  const fx = [], fy = [], sz = [], sx = (xr[1]-xr[0])/(n-1), sy = (yr[1]-yr[0])/(n-1);
+  const L = 0.42*Math.min(sx, sy);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const x = xr[0] + i*sx, y = yr[0] + j*sy, [u, v] = F(x, y), m = Math.hypot(u, v);
+    if (!isFinite(m) || m < 1e-12) continue;
+    fx.push(x - L*u/m, x + L*u/m, null); fy.push(y - L*v/m, y + L*v/m, null); sz.push(0, 6, 0);
+  }
+  return {x:fx, y:fy, mode:'lines+markers', hoverinfo:'skip', showlegend:false, line:{color, width:1},
+          marker:{symbol:'arrow', angleref:'previous', size:sz, color}};
+}
+function arrowOn(path, color, frac=0.3) {
+  const k = Math.max(1, Math.floor(path.xs.length*frac));
+  if (k >= path.xs.length) return null;
+  return {x:[path.xs[k-1], path.xs[k]], y:[path.ys[k-1], path.ys[k]], mode:'markers', hoverinfo:'skip', showlegend:false,
+          marker:{symbol:'arrow', angleref:'previous', size:[0, 10], color}};
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+let SYS = null, F = null, EQS = [], sel = 0;
+
+function loadSystem() {
+  const key = document.getElementById('sys-sel').value;
+  SYS = SYSTEMS[key];
+  sel = 0;
+  document.getElementById('system-desc').textContent = SYS.desc;
+  document.getElementById('custom-box').style.display = key === 'custom' ? '' : 'none';
+  if (key === 'custom') { onCustom(true); return; }
+  const f = compile(SYS.f), g = compile(SYS.g);
+  F = (x, y) => [f(x, y), g(x, y)];
+  analyze();
+}
+function onCustom(now) {
+  const err = document.getElementById('expr-err');
+  try {
+    const f = compile(document.getElementById('f-in').value), g = compile(document.getElementById('g-in').value);
+    F = (x, y) => [f(x, y), g(x, y)];
+    err.style.display = 'none';
+    clearTimeout(_c);
+    if (now === true) analyze(); else _c = setTimeout(analyze, 300);
+  } catch (e) {
+    err.textContent = 'Could not read that expression: ' + e.message;
+    err.style.display = 'block';
+  }
+}
+let _c;
+
+function analyze() {
+  EQS = findEquilibria(F, SYS.xr, SYS.yr).map(p => {
+    const J = jacobian(F, p[0], p[1]), E = eig2(J);
+    return {p, J, E, C: classify(E, J)};
+  });
+  const eqSel = document.getElementById('eq-sel');
+  eqSel.innerHTML = EQS.length
+    ? EQS.map((q, i) => `<option value="${i}">E${i+1}: (${fmt(q.p[0])}, ${fmt(q.p[1])}) — ${q.C.name}</option>`).join('')
+    : '<option>No equilibria in this window</option>';
+  sel = Math.min(sel, Math.max(0, EQS.length - 1));
+  if (EQS.length) eqSel.value = sel;
+  build();
+}
+
+function selectEq(i) { sel = i; document.getElementById('eq-sel').value = i; build(); }
+
+function build() {
+  if (!F) return;
+  const {xr, yr} = SYS, box = [xr[0] - 0.5, xr[1] + 0.5, yr[0] - 0.5, yr[1] + 0.5];
+  const traces = [];
+
+  if (document.getElementById('show-null').checked) {
+    const n = 90, xs = [], ys = [], zf = [], zg = [];
+    for (let i = 0; i < n; i++) xs.push(xr[0] + (xr[1]-xr[0])*i/(n-1));
+    for (let j = 0; j < n; j++) ys.push(yr[0] + (yr[1]-yr[0])*j/(n-1));
+    for (const y of ys) { const rf = [], rg = []; for (const x of xs) { const v = F(x, y); rf.push(v[0]); rg.push(v[1]); } zf.push(rf); zg.push(rg); }
+    const nc = (z, color, name) => ({type:'contour', x:xs, y:ys, z, showscale:false, hoverinfo:'skip', name, showlegend:true,
+      contours:{start:0, end:0, size:1, coloring:'lines'}, colorscale:[[0, color], [1, color]], line:{width:2, dash:'dash'}});
+    traces.push(nc(zf, '#2dd4ef', "x′ = 0"), nc(zg, '#9b72e8', "y′ = 0"));
+  }
+  if (document.getElementById('show-field').checked) traces.push(fieldTrace(F, xr, yr, 19, 'rgba(135,150,196,0.45)'));
+
+  // Sample trajectories from a coarse grid
+  const sx = [], sy = [];
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const x0 = xr[0] + (xr[1]-xr[0])*(i + 0.5)/4, y0 = yr[0] + (yr[1]-yr[0])*(j + 0.5)/4;
+    const fw = rk4Path(F, x0, y0, SYS.T, 1, box), bw = rk4Path(F, x0, y0, SYS.T, -1, box);
+    sx.push(...bw.xs.reverse(), ...fw.xs.slice(1), null); sy.push(...bw.ys.reverse(), ...fw.ys.slice(1), null);
+    const ar = arrowOn(fw, 'rgba(232,237,248,0.55)');
+    if (ar) traces.push(ar);
+  }
+  traces.push({x:sx, y:sy, mode:'lines', hoverinfo:'skip', showlegend:false, line:{color:'rgba(232,237,248,0.28)', width:1.2}});
+
+  // Equilibria, colored by linearized type
+  EQS.forEach((q, i) => traces.push({
+    x:[q.p[0]], y:[q.p[1]], mode:'markers+text', text:[`E${i+1}`], textposition:'top right', textfont:{color:'#e8edf8', size:11},
+    hoverinfo:'skip', showlegend:false,
+    marker:{color:TYPE_COLOR[q.C.kind], size: i === sel ? 14 : 10, symbol: q.C.kind === 'saddle' ? 'x' : 'circle',
+            line:{color:'white', width: i === sel ? 2 : 1}},
+  }));
+
+  const w = g('w-s'), cur = EQS[sel];
+  const shapes = cur ? [{type:'rect', x0:cur.p[0]-w, x1:cur.p[0]+w, y0:cur.p[1]-w, y1:cur.p[1]+w,
+                         line:{color:'#f0a500', width:1.5, dash:'dot'}}] : [];
+  Plotly.react('global-plot', traces, {
+    ...BASE, showlegend:true, hovermode:false, dragmode:false,
+    title:{text:'Nonlinear phase portrait', font:{size:13}},
+    legend:{x:0.99, xanchor:'right', y:0.99, bgcolor:'rgba(12,26,48,0.8)', bordercolor:'#1A304D', borderwidth:1, font:{size:11}},
+    xaxis:{title:'x', range:xr, fixedrange:true, ...AX},
+    yaxis:{title:'y', range:yr, fixedrange:true, scaleanchor:'x', scaleratio:1, ...AX},
+    shapes,
+  }, CFG);
+
+  buildZoom();
+  buildInfo();
+}
+
+function g(id) { return parseFloat(document.getElementById(id).value); }
+
+function buildZoom() {
+  const cur = EQS[sel];
+  if (!cur) {
+    ['nl-plot', 'lin-plot'].forEach(id => Plotly.react(id, [], {...BASE, title:{text:'No equilibrium selected', font:{size:13}}, xaxis:AX, yaxis:AX}, CFG));
+    return;
+  }
+  const w = g('w-s'), [px, py] = cur.p, J = cur.J;
+  const xr = [px - w, px + w], yr = [py - w, py + w], box = [px - 1.3*w, px + 1.3*w, py - 1.3*w, py + 1.3*w];
+  const Lin = (x, y) => [J[0][0]*(x-px) + J[0][1]*(y-py), J[1][0]*(x-px) + J[1][1]*(y-py)];
+
+  const portrait = (Fn, color) => {
+    const tr = [fieldTrace(Fn, xr, yr, 13, 'rgba(135,150,196,0.4)')];
+    const px_ = [], py_ = [];
+    for (let k = 0; k < 10; k++) {
+      const th = 2*Math.PI*(k + 0.5)/10, x0 = px + 0.75*w*Math.cos(th), y0 = py + 0.75*w*Math.sin(th);
+      const fw = rk4Path(Fn, x0, y0, SYS.T, 1, box), bw = rk4Path(Fn, x0, y0, SYS.T, -1, box);
+      px_.push(...bw.xs.reverse(), ...fw.xs.slice(1), null); py_.push(...bw.ys.reverse(), ...fw.ys.slice(1), null);
+      const ar = arrowOn(fw, color, 0.15); if (ar) tr.push(ar);
+    }
+    tr.push({x:px_, y:py_, mode:'lines', hoverinfo:'skip', showlegend:false, line:{color, width:1.6}});
+    tr.push({x:[px], y:[py], mode:'markers', hoverinfo:'skip', showlegend:false,
+             marker:{color:TYPE_COLOR[cur.C.kind], size:10, line:{color:'white', width:1.5}}});
+    return tr;
+  };
+  const layout = title => ({...BASE, showlegend:false, hovermode:false, dragmode:false,
+    title:{text:title, font:{size:13}},
+    xaxis:{range:xr, fixedrange:true, ...AX, zeroline:false}, yaxis:{range:yr, fixedrange:true, scaleanchor:'x', scaleratio:1, ...AX, zeroline:false}});
+  Plotly.react('nl-plot', portrait(F, '#f0a500'), layout(`Nonlinear, zoomed in on E${sel+1}`), CFG);
+  Plotly.react('lin-plot', portrait(Lin, '#4d9fff'), layout('Linearization u′ = J u'), CFG);
+}
+
+function buildInfo() {
+  const cur = EQS[sel], verdict = document.getElementById('verdict');
+  if (!cur) {
+    ['m-eq','m-l1','m-l2','m-type'].forEach(id => document.getElementById(id).textContent = '—');
+    document.getElementById('jac-sym').innerHTML = ''; document.getElementById('jac-num').innerHTML = '';
+    verdict.className = 'verdict warn'; verdict.textContent = 'No equilibria were found in this window.';
+    return;
+  }
+  const {p, J, E, C} = cur;
+  document.getElementById('m-eq').textContent = `(${fmt(p[0])}, ${fmt(p[1])})`;
+  if (E.type === 'complex') {
+    document.getElementById('m-l1').textContent = cText(E.alpha, E.beta);
+    document.getElementById('m-l2').textContent = cText(E.alpha, -E.beta);
+  } else {
+    document.getElementById('m-l1').textContent = fmt(E.l1);
+    document.getElementById('m-l2').textContent = fmt(E.l2);
+  }
+  const typeEl = document.getElementById('m-type');
+  typeEl.textContent = C.name; typeEl.style.color = TYPE_COLOR[C.kind];
+
+  const symTex = SYS.jac ? `${SYS.jac}\\qquad` : '';
+  document.getElementById('jac-sym').innerHTML = katex.renderToString(
+    `${symTex} J(${fmt(p[0])},\\,${fmt(p[1])}) = \\begin{pmatrix} ${fmt(J[0][0])} & ${fmt(J[0][1])} \\\\ ${fmt(J[1][0])} & ${fmt(J[1][1])} \\end{pmatrix}`,
+    {...KX, displayMode:true});
+  const eigTex = E.type === 'complex'
+    ? `\\lambda = ${fmt(E.alpha) === '0' ? '' : fmt(E.alpha)} \\pm ${fmt(E.beta)}\\,i`
+    : `\\lambda_1 = ${fmt(E.l1)},\\quad \\lambda_2 = ${fmt(E.l2)}`;
+  document.getElementById('jac-num').innerHTML = katex.renderToString(
+    `T = ${fmt(E.T)},\\quad D = ${fmt(E.D)},\\quad ${eigTex}`, {...KX, displayMode:true});
+
+  if (C.hyperbolic) {
+    verdict.className = 'verdict ok';
+    const rep = E.type === 'repeated' ? ' Because the eigenvalues are equal, the nonlinear system could be a node or a spiral here, but its stability matches.' : '';
+    verdict.textContent = `Hyperbolic equilibrium: every eigenvalue has nonzero real part, so near E${sel+1} the nonlinear system is also a ${C.name.toLowerCase().replace(' (repeated λ)', '')} with the same stability.${rep} Shrink the zoom window to see the two portraits match.`;
+  } else {
+    verdict.className = 'verdict warn';
+    verdict.textContent = C.name.startsWith('Center')
+      ? `Not hyperbolic: the eigenvalues are purely imaginary, so the linearization is a center. The nonlinear system may be a center or a spiral (stable or unstable) — linearization is inconclusive here. Compare the two zoomed portraits.`
+      : `Not hyperbolic: an eigenvalue is zero, so linearization cannot determine the type or stability of E${sel+1}.`;
+  }
+}
+
+// ── Click to select the nearest equilibrium ──────────────────────────────────
+function attachClick() {
+  const gd = document.getElementById('global-plot');
+  gd.addEventListener('click', evt => {
+    if (!gd._fullLayout || !EQS.length) return;
+    const rect = gd.getBoundingClientRect(), xa = gd._fullLayout.xaxis, ya = gd._fullLayout.yaxis;
+    const x = xa.p2d(evt.clientX - rect.left - xa._offset), y = ya.p2d(evt.clientY - rect.top - ya._offset);
+    if (!isFinite(x) || !isFinite(y)) return;
+    let best = 0, bd = Infinity;
+    EQS.forEach((q, i) => { const d = Math.hypot(q.p[0]-x, q.p[1]-y); if (d < bd) { bd = d; best = i; } });
+    const span = Math.max(SYS.xr[1]-SYS.xr[0], SYS.yr[1]-SYS.yr[0]);
+    if (bd < 0.15*span) selectEq(best);
+  });
+}
+
+function toggleExp(head) {
+  const body = head.nextElementSibling, arrowEl = head.querySelector('.expander-arrow');
+  body.classList.toggle('hidden');
+  arrowEl.style.transform = body.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+let _z;
+function scheduleZoom() { clearTimeout(_z); _z = setTimeout(build, 60); }
+window.addEventListener('load', () => { loadSystem(); attachClick(); });
+</script>
+</body>
+</html>

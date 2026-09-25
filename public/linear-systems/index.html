@@ -117,6 +117,14 @@
         <div id="gen-aux"></div>
         <h3 style="margin-top:0.6rem;">Selected trajectory</h3>
         <div id="part-sol" class="note"></div>
+        <h3 style="margin-top:0.6rem;">Matrix exponential (fundamental matrix)</h3>
+        <div id="expm-formula"></div>
+        <div class="ctrl-row" style="max-width:340px; margin:0.2rem 0 0;">
+          <div class="ctrl-label">Evaluate at t = <span class="ctrl-val" id="tx-v">1.00</span></div>
+          <input type="range" id="tx-s" min="0" max="6" step="0.05" value="1"
+                 oninput="document.getElementById('tx-v').textContent=(+this.value).toFixed(2); schedule()">
+        </div>
+        <div id="expm-num"></div>
       </div>
 
       <div class="plot-box">
@@ -294,6 +302,17 @@ function closedForm(E, cc, t) {
   return [c1*el, c2*el];
 }
 
+function expm(E, t) {
+  const c1 = closedForm(E, coeffs(E, 1, 0), t), c2 = closedForm(E, coeffs(E, 0, 1), t);
+  return [[c1[0], c2[0]], [c1[1], c2[1]]];
+}
+function matTex(M, dp=3) {
+  return `\\begin{pmatrix}${fmt(M[0][0], dp)} & ${fmt(M[0][1], dp)}\\\\ ${fmt(M[1][0], dp)} & ${fmt(M[1][1], dp)}\\end{pmatrix}`;
+}
+function colsTex(u, w) {
+  return `\\begin{pmatrix}${fmt(u[0])} & ${fmt(w[0])}\\\\ ${fmt(u[1])} & ${fmt(w[1])}\\end{pmatrix}`;
+}
+
 // ── Numerics ─────────────────────────────────────────────────────────────────
 function integrate(A, x0, y0, T, dir) {
   const [a,b,c,d] = A, h = 0.01*dir, n = Math.round(T/0.01), BIG = 6*R;
@@ -420,6 +439,19 @@ function build() {
   traces.push({x:[0], y:[0], mode:'markers', name:'Equilibrium', hoverinfo:'skip',
                marker:{color:'#e8edf8', size:9, symbol:'x'}});
 
+  const txS = document.getElementById('tx-s');
+  txS.max = Tspan;
+  if (+txS.value > Tspan) { txS.value = Tspan; document.getElementById('tx-v').textContent = Tspan.toFixed(2); }
+  const tStar = +txS.value, M = expm(E, tStar);
+  let xStar = null;
+  if (ICS.length) {
+    const ic = ICS[ICS.length-1];
+    xStar = [M[0][0]*ic.x0 + M[0][1]*ic.y0, M[1][0]*ic.x0 + M[1][1]*ic.y0];
+    if (Math.abs(xStar[0]) <= R && Math.abs(xStar[1]) <= R)
+      traces.push({x:[xStar[0]], y:[xStar[1]], mode:'markers', name:`x(${fmt(tStar)}) = e^(At)x(0)`, hoverinfo:'skip',
+                   marker:{color:'#34d399', size:15, symbol:'star', line:{color:'white', width:1}}});
+  }
+
   Plotly.react('pp-plot', traces, {
     ...BASE, showlegend:true, hovermode:false, dragmode:false,
     legend:{orientation:'h', x:0, y:-0.08, bgcolor:'rgba(0,0,0,0)', font:{size:11}},
@@ -443,6 +475,21 @@ function build() {
     tex('gen-sol', `\\mathbf{x}(t) = ${expTex(E.l1)}\\begin{pmatrix}c_1\\\\c_2\\end{pmatrix}`);
     tex('gen-aux', `A = ${fmt(E.l1)}I:\\ \\text{every nonzero vector is an eigenvector}`);
   }
+
+  // ── Matrix exponential ──
+  let expmF;
+  if (E.type === 'real')
+    expmF = `e^{At} = V\\begin{pmatrix}${expTex(E.l1) || '1'} & 0\\\\ 0 & ${expTex(E.l2) || '1'}\\end{pmatrix}V^{-1},\\quad V = [\\,\\mathbf{v}_1\\ \\mathbf{v}_2\\,] = ${colsTex(E.v1, E.v2)}`;
+  else if (E.type === 'complex')
+    expmF = `e^{At} = ${expTex(E.alpha)}\\,P\\begin{pmatrix}\\cos ${coef(E.beta)}t & \\sin ${coef(E.beta)}t\\\\ -\\sin ${coef(E.beta)}t & \\cos ${coef(E.beta)}t\\end{pmatrix}P^{-1},\\quad P = [\\,\\mathbf{p}\\ \\mathbf{q}\\,] = ${colsTex(E.p, E.q)}`;
+  else if (E.type === 'repeated')
+    expmF = `e^{At} = ${expTex(E.l1)}\\big(I + t\\,(A - \\lambda I)\\big) \\quad\\text{since } (A - \\lambda I)^2 = 0`;
+  else
+    expmF = `e^{At} = ${expTex(E.l1) || '1\\cdot'}\\,I`;
+  tex('expm-formula', expmF);
+  let expmN = `e^{A\\,(${fmt(tStar)})} = ${matTex(M)}`;
+  if (xStar) expmN += `,\\qquad \\mathbf{x}(${fmt(tStar)}) = e^{A\\,(${fmt(tStar)})}\\,\\mathbf{x}(0) = ${vecTex(xStar)}`;
+  tex('expm-num', expmN);
 
   // ── Selected trajectory: constants and time series ──
   const partEl = document.getElementById('part-sol');
