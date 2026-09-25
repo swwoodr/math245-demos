@@ -46,8 +46,9 @@ Then open <http://localhost:4245>. Pages must be served over HTTP (not opened as
      grid color `#1A304D`. Replace `Infinity`/`NaN` with `null` so Plotly skips the
      point instead of wrecking the axis range.
 
-2. **Add a card to `public/index.html`** in the matching section (or add a new
-   `<section class="app-grid-section">`):
+2. **Add a card to `public/index.html`** in the matching section — Foundations
+   (prerequisite math), Block I–IV (course blocks), or Advanced Topics. The
+   card's tag names the specific topic (e.g. "1st-Order", "Complex", "Chaos"):
 
    ```html
    <a class="app-card" href="/<demo-name>/" style="--accent:#4d9fff">
